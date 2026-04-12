@@ -3,9 +3,17 @@ require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
 const axios = require("axios");
-const fetch = require("node-fetch");
 const { Client, GatewayIntentBits } = require("discord.js");
 const OpenAI = require("openai");
+
+// ================= CRASH PROTECTION =================
+process.on("uncaughtException", (err) => {
+  console.error("🔥 UNCAUGHT ERROR:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("🔥 PROMISE ERROR:", err);
+});
 
 // ================= DEBUG =================
 console.log("🚀 Starting Harry...");
@@ -81,25 +89,30 @@ async function searchGoogle(query) {
   }
 }
 
-// ================= SYSTEM PROMPT =================
+// ================= 🔒 TEMPLATE LOCK PROMPT =================
 const SYSTEM_PROMPT = `
-You are Harry, an intelligent AI assistant.
+You are Harry, a STRICT HTML template editor.
 
-MODES:
-1. Normal Chat → talk like ChatGPT
-2. Project Mode → edit HTML receipts
+🚨 ABSOLUTE RULES:
+- NEVER change layout
+- NEVER change spacing
+- NEVER reformat HTML
+- NEVER reorder anything
+- NEVER improve or redesign
 
-RULES (Project Mode):
-- DO NOT change layout
-- DO NOT change spacing
-- ONLY replace values
-- KEEP structure EXACT
-- OUTPUT RAW HTML ONLY (NO \`\`\`)
+YOU MUST:
+- ONLY replace text values
+- KEEP ALL TAGS EXACT
+- KEEP INDENTATION EXACT
+- KEEP LINE BREAKS EXACT
 
-PERSONALITY:
-- Friendly
-- Smart
-- Natural
+OUTPUT:
+- FULL HTML ONLY
+- NO explanations
+- NO markdown
+- NO \`\`\`
+
+If unsure → DO NOTHING to structure.
 `;
 
 // ================= MESSAGE =================
@@ -107,20 +120,20 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
+    console.log("📩 MESSAGE:", message.content);
+
     const userId = message.author.id;
     let msg = message.content.trim();
     const lower = msg.toLowerCase();
 
-    console.log("📩", msg);
-
-    // ================= 📄 READ ATTACHMENTS =================
+    // ================= READ ATTACHMENTS =================
     if (message.attachments.size > 0) {
       const file = message.attachments.first();
 
       if (file.name.endsWith(".html") || file.name.endsWith(".txt")) {
-        const res = await fetch(file.url);
-        msg = await res.text();
-        console.log("📄 HTML loaded from attachment");
+        const res = await axios.get(file.url);
+        msg = res.data;
+        console.log("📄 Loaded HTML from attachment");
       }
     }
 
@@ -191,8 +204,14 @@ ${searchResult}
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: msg }
+          {
+            role: "system",
+            content: "You are Harry, a friendly and smart assistant."
+          },
+          {
+            role: "user",
+            content: msg
+          }
         ]
       });
 
@@ -213,10 +232,10 @@ ${searchResult}
       return message.reply("⚠️ Send HTML template first.");
     }
 
-    // ================= 📦 MULTI-PART =================
+    // ================= 📦 MULTI PART =================
     if (lower.includes("part")) {
       user.instructions += "\n" + msg;
-      return message.reply("🧙‍♂️ Waiting for next part...");
+      return message.reply("🧙 Waiting for next part...");
     }
 
     // ================= ⚡ GENERATE =================
@@ -228,10 +247,13 @@ ${searchResult}
           {
             role: "user",
             content: `
-Template:
+You MUST follow this template EXACTLY.
+
+TEMPLATE:
 ${project.template}
 
-Instructions:
+ONLY replace values using:
+
 ${user.instructions}
             `
           }
@@ -251,7 +273,9 @@ ${user.instructions}
         {
           role: "user",
           content: `
-Template:
+You MUST follow this template EXACTLY.
+
+TEMPLATE:
 ${project.template}
 
 Change request:

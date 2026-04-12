@@ -5,7 +5,12 @@ const express = require("express");
 const { Client, GatewayIntentBits } = require("discord.js");
 const OpenAI = require("openai");
 
-// ================= EXPRESS SERVER (KEEP BOT ALIVE) =================
+// ================= DEBUG ENV =================
+console.log("🔍 Checking ENV...");
+console.log("DISCORD_TOKEN exists:", !!process.env.DISCORD_TOKEN);
+console.log("OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+
+// ================= EXPRESS SERVER =================
 const app = express();
 
 app.get("/", (req, res) => {
@@ -51,12 +56,12 @@ client.once("ready", () => {
   console.log(`🧙‍♂️ Harry is online as ${client.user.tag}`);
 });
 
-// ================= MAIN =================
+// ================= MESSAGE HANDLER =================
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
-    console.log("📩 MESSAGE:", message.content);
+    console.log("📩 MESSAGE RECEIVED:", message.content);
 
     await message.channel.sendTyping();
 
@@ -64,7 +69,7 @@ client.on("messageCreate", async (message) => {
     const msg = message.content.trim();
     const lower = msg.toLowerCase();
 
-    // INIT USER MEMORY
+    // INIT USER
     if (!memory[userId]) {
       memory[userId] = {
         projects: {},
@@ -99,7 +104,7 @@ client.on("messageCreate", async (message) => {
 
     const currentProject = user.currentProject;
 
-    // ================= NO PROJECT (CHATGPT MODE) =================
+    // ================= CHATGPT MODE =================
     if (!currentProject) {
       const aiResponse = await openai.responses.create({
         model: "gpt-5.3",
@@ -113,21 +118,15 @@ client.on("messageCreate", async (message) => {
 
     // ================= SAVE RULES =================
     if (lower.startsWith("rules:")) {
-      const rules = msg.replace(/rules:/i, "").trim();
-
-      project.rules = rules;
+      project.rules = msg.replace(/rules:/i, "").trim();
       saveMemory();
-
       return message.reply(`📜 Rules saved for project: ${currentProject}`);
     }
 
     // ================= SAVE NOTES =================
     if (lower.startsWith("notes:")) {
-      const notes = msg.replace(/notes:/i, "").trim();
-
-      project.notes = notes;
+      project.notes = msg.replace(/notes:/i, "").trim();
       saveMemory();
-
       return message.reply(`🧠 Notes saved for project: ${currentProject}`);
     }
 
@@ -135,13 +134,12 @@ client.on("messageCreate", async (message) => {
     if (msg.startsWith("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
-
       return message.reply(`🧾 Template saved for project: ${currentProject}`);
     }
 
     // ================= NO TEMPLATE =================
     if (!project.template) {
-      return message.reply("⚠️ No template saved yet. Please send HTML template first.");
+      return message.reply("⚠️ No template saved yet. Send HTML template first.");
     }
 
     // ================= AI GENERATION =================
@@ -151,19 +149,13 @@ client.on("messageCreate", async (message) => {
         {
           role: "system",
           content: `
-You are Harry, a master receipt wizard and expert HTML engineer.
+You are Harry, a smart AI assistant and expert HTML receipt generator.
 
-CORE BEHAVIOR:
-- You behave like ChatGPT (smart, helpful, conversational)
-- You also specialize in receipt HTML generation
+Follow template EXACTLY.
+Do NOT change layout.
+Only modify content.
 
-STRICT RULES:
-- Follow template EXACTLY
-- Do NOT change structure
-- Only modify content
-
-OUTPUT:
-Short reply + FULL HTML
+Respond with short message + FULL HTML.
 `,
         },
         {
@@ -202,5 +194,15 @@ ${msg}
   }
 });
 
-// ================= LOGIN =================
-client.login(process.env.DISCORD_TOKEN);
+// ================= LOGIN DEBUG =================
+if (!process.env.DISCORD_TOKEN) {
+  console.error("❌ DISCORD_TOKEN is MISSING");
+}
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => {
+    console.log("✅ Discord login success");
+  })
+  .catch((err) => {
+    console.error("❌ Discord login failed:", err);
+  });

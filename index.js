@@ -28,24 +28,19 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ],
-  failIfNotExists: false
 });
 
-// ===== CONNECTION DEBUG =====
-client.once('ready', () => {
-  console.log(`🔥 FULLY CONNECTED AS ${client.user.tag}`);
+// ===== FORCE CONNECTION DEBUG =====
+client.on('ready', () => {
+  console.log(`🔥 CONNECTED AS ${client.user.tag}`);
+});
+
+client.on('debug', (info) => {
+  console.log("🐛 DEBUG:", info);
 });
 
 client.on('error', (err) => {
-  console.error("❌ Client error:", err);
-});
-
-client.on('shardError', (err) => {
-  console.error("❌ Shard error:", err);
-});
-
-client.on('disconnect', () => {
-  console.log("⚠️ Bot disconnected");
+  console.error("❌ ERROR:", err);
 });
 
 // ================= OPENAI =================
@@ -53,66 +48,41 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// ================= 🧠 HARRY BRAIN (DO NOT REMOVE) =================
+// ================= 🧠 HARRY BRAIN =================
 const HARRY_SYSTEM_PROMPT = `
-You are Harry, a powerful Wizard AI 🧙‍♂️ specializing in generating HTML receipts and web layouts.
+You are Harry, a wizard AI 🧙‍♂️ that specializes in generating HTML receipt layouts.
 
-CORE IDENTITY:
-- You are NOT ChatGPT
-- You are Harry
-- Confident, natural, slightly witty
-
-MAIN PURPOSE:
-- Generate COMPLETE HTML receipts
-- Clean layout
+RULES:
+- Always generate FULL HTML when requested
+- Clean structure
 - Inline CSS
-- Mobile friendly
+- No explanations when generating HTML
+- Wait for multi-part instructions until "DONE"
 
-STRICT RULES:
-- If generating HTML → ONLY RETURN CODE
-- Always include full structure:
-<html>
-<head>
-<body>
-
-MULTI-PART SYSTEM:
-- If user sends "part 1", "part 2" → STORE it
-- Say: "🧙‍♂️ Waiting for next part..."
-- ONLY generate when user says:
-  "DONE" or "GENERATE"
-
-GENERAL MODE:
-- If normal message → respond normally
-
-TONE:
+PERSONALITY:
 - Friendly
-- Human-like
-- Not robotic
+- Confident
+- Slightly witty
 `;
 
 // ================= MEMORY =================
 let userInstructions = "";
 
-// ================= MESSAGE HANDLER =================
+// ================= MESSAGE =================
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  const userMsg = message.content;
-  console.log("📩 Message:", userMsg);
+  const msg = message.content;
+  console.log("📩", msg);
 
-  // ===== STORE PARTS =====
-  if (userMsg.toLowerCase().includes("part")) {
-    userInstructions += "\n" + userMsg;
+  if (msg.toLowerCase().includes("part")) {
+    userInstructions += "\n" + msg;
     return message.reply("🧙‍♂️ Waiting for next part...");
   }
 
-  // ===== GENERATE HTML =====
-  if (
-    userMsg.toLowerCase().includes("done") ||
-    userMsg.toLowerCase().includes("generate")
-  ) {
+  if (msg.toLowerCase().includes("done") || msg.toLowerCase().includes("generate")) {
     try {
-      const response = await openai.chat.completions.create({
+      const res = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: HARRY_SYSTEM_PROMPT },
@@ -122,51 +92,41 @@ client.on('messageCreate', async (message) => {
 
       userInstructions = "";
 
-      return message.reply(
-        "```html\n" + response.choices[0].message.content + "\n```"
-      );
-
+      return message.reply("```html\n" + res.choices[0].message.content + "\n```");
     } catch (err) {
-      console.error("❌ OpenAI Error:", err);
+      console.error(err);
       return message.reply("❌ Failed to generate HTML.");
     }
   }
 
-  // ===== NORMAL CHAT =====
   try {
-    const response = await openai.chat.completions.create({
+    const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: HARRY_SYSTEM_PROMPT },
-        { role: "user", content: userMsg }
+        { role: "user", content: msg }
       ]
     });
 
-    message.reply(response.choices[0].message.content);
-
-  } catch (error) {
-    console.error("❌ OpenAI Error:", error);
-    message.reply("⚠️ Something went wrong.");
+    message.reply(res.choices[0].message.content);
+  } catch (err) {
+    console.error(err);
+    message.reply("⚠️ Error.");
   }
 });
 
 // ================= LOGIN (FINAL FIX) =================
-(async () => {
-  console.log("👉 Logging in...");
-
-  const token = process.env.DISCORD_TOKEN;
-
-  if (!token) {
-    console.error("❌ NO TOKEN FOUND");
-    process.exit(1);
-  }
-
+async function startBot() {
   try {
-    await client.login(token);
-    console.log("🔑 Login request sent...");
+    console.log("👉 Connecting to Discord...");
+
+    await client.login(process.env.DISCORD_TOKEN);
+
+    console.log("✅ Login request sent");
+
   } catch (err) {
-    console.error("❌ LOGIN FAILED:");
-    console.error(err);
-    process.exit(1);
+    console.error("❌ LOGIN ERROR:", err);
   }
-})();
+}
+
+startBot();

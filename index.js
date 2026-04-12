@@ -4,12 +4,12 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const OpenAI = require('openai');
 
-// ===== DEBUG =====
+// ================= DEBUG =================
 console.log("🚀 Starting Harry...");
 console.log("🔍 Token exists:", !!process.env.DISCORD_TOKEN);
 console.log("🔍 OpenAI exists:", !!process.env.OPENAI_API_KEY);
 
-// ===== EXPRESS SERVER =====
+// ================= EXPRESS =================
 const app = express();
 
 app.get('/', (req, res) => {
@@ -21,76 +21,99 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-// ===== DISCORD CLIENT =====
+// ================= DISCORD CLIENT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  failIfNotExists: false
 });
 
-// ===== OPENAI =====
+// ===== CONNECTION DEBUG =====
+client.on('ready', () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+client.on('error', (err) => {
+  console.error("❌ Client error:", err);
+});
+
+client.on('shardError', (err) => {
+  console.error("❌ Shard error:", err);
+});
+
+client.on('disconnect', () => {
+  console.log("⚠️ Bot disconnected");
+});
+
+client.on('reconnecting', () => {
+  console.log("🔄 Reconnecting...");
+});
+
+// ================= OPENAI =================
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// ===== 🔥 HARRY PERSONALITY (DO NOT REMOVE) =====
+// ================= 🧠 HARRY BRAIN (DO NOT REMOVE) =================
 const HARRY_SYSTEM_PROMPT = `
 You are Harry, a powerful Wizard AI 🧙‍♂️ specializing in generating HTML receipts and web layouts.
 
 CORE IDENTITY:
 - You are NOT ChatGPT
 - You are Harry, a wizard-level AI assistant
-- You speak naturally, slightly witty, confident, and helpful
+- You speak naturally, confident, slightly witty
 
 MAIN PURPOSE:
-- Generate CLEAN, COMPLETE HTML code for receipts
-- Follow user instructions step-by-step
-- WAIT for all parts if user says "this is part 1, 2, etc."
-- Only generate FINAL HTML when user says: "DONE" or "GENERATE"
+- Generate COMPLETE HTML receipts
+- Clean structure
+- Professional layout
+- Mobile-friendly
+- Inline CSS only
 
-RECEIPT RULES:
-- Always output COMPLETE HTML (with <html>, <head>, <body>)
-- Use clean inline CSS
-- Make layout neat and professional
-- No explanations when generating HTML — ONLY CODE
-- Mobile-friendly design
+STRICT RULES:
+- When generating HTML → ONLY OUTPUT CODE
+- No explanations when generating HTML
+- Always include full structure: <html>, <head>, <body>
 
-BEHAVIOR:
-- If instructions are incomplete → say: "Waiting for next part..."
-- If complete → generate final HTML
-- You can also answer normal questions like a smart assistant
+MULTI-PART BEHAVIOR:
+- If user sends "part 1", "part 2", etc → STORE it
+- Respond: "🧙‍♂️ Waiting for next part..."
+- ONLY generate when user says:
+  "DONE" or "GENERATE"
+
+GENERAL MODE:
+- If normal question → answer like smart assistant
 
 TONE:
-- Friendly, confident, slightly playful
+- Friendly
+- Natural
 - Not robotic
 `;
 
-// ===== MEMORY FOR PARTS =====
+// ================= MEMORY =================
 let userInstructions = "";
 
-// ===== READY =====
-client.on('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-});
-
-// ===== MESSAGE HANDLER =====
+// ================= MESSAGE HANDLER =================
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const userMsg = message.content;
-
   console.log("📩 Message:", userMsg);
 
-  // ===== HANDLE MULTI-PART INSTRUCTIONS =====
+  // ===== PART HANDLER =====
   if (userMsg.toLowerCase().includes("part")) {
     userInstructions += "\n" + userMsg;
-    return message.reply("🧙‍♂️ Got it. Waiting for next part...");
+    return message.reply("🧙‍♂️ Waiting for next part...");
   }
 
-  // ===== GENERATE HTML WHEN DONE =====
-  if (userMsg.toLowerCase().includes("done") || userMsg.toLowerCase().includes("generate")) {
+  // ===== GENERATE HTML =====
+  if (
+    userMsg.toLowerCase().includes("done") ||
+    userMsg.toLowerCase().includes("generate")
+  ) {
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -100,13 +123,15 @@ client.on('messageCreate', async (message) => {
         ]
       });
 
-      userInstructions = ""; // reset after use
+      userInstructions = "";
 
-      return message.reply("```html\n" + response.choices[0].message.content + "\n```");
+      return message.reply(
+        "```html\n" + response.choices[0].message.content + "\n```"
+      );
 
     } catch (err) {
-      console.error(err);
-      return message.reply("❌ Error generating HTML.");
+      console.error("❌ OpenAI Error:", err);
+      return message.reply("❌ Failed to generate HTML.");
     }
   }
 
@@ -128,14 +153,24 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ===== LOGIN =====
+// ================= LOGIN =================
 (async () => {
   console.log("👉 Logging in...");
 
   try {
-    await client.login(process.env.DISCORD_TOKEN);
-    console.log("🔑 Login success");
+    const token = process.env.DISCORD_TOKEN;
+
+    if (!token) {
+      console.error("❌ NO TOKEN FOUND");
+      return;
+    }
+
+    await client.login(token);
+
+    console.log("🔑 Login request sent...");
+
   } catch (err) {
-    console.error("❌ Login failed:", err);
+    console.error("❌ LOGIN FAILED:");
+    console.error(err);
   }
 })();

@@ -215,3 +215,13 @@ ${msg}
 
 // ================= LOGIN =================
 client.login(process.env.DISCORD_TOKEN);
+
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("Harry bot is alive!");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

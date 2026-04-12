@@ -1,3 +1,26 @@
+const axios = require("axios");
+
+async function searchGoogle(query) {
+  try {
+    const res = await axios.post(
+      "https://google.serper.dev/search",
+      { q: query },
+      {
+        headers: {
+          "X-API-KEY": process.env.SERPER_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const results = res.data.organic.slice(0, 3);
+
+    return results.map(r => `${r.title}\n${r.snippet}`).join("\n\n");
+
+  } catch (err) {
+    return "Search failed.";
+  }
+}
 require("dotenv").config();
 
 const fs = require("fs");
@@ -158,6 +181,40 @@ ${user.instructions}
         return message.reply("❌ Failed to generate.");
       }
     }
+// ================= INTERNET SEARCH =================
+const needsSearch =
+  lower.includes("latest") ||
+  lower.includes("today") ||
+  lower.includes("news") ||
+  lower.includes("current") ||
+  lower.includes("weather") ||
+  lower.includes("price");
+
+if (needsSearch) {
+  const searchResult = await searchGoogle(msg);
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content: "Use real-time search results to answer the user."
+      },
+      {
+        role: "user",
+        content: `
+User question:
+${msg}
+
+Search results:
+${searchResult}
+        `
+      }
+    ]
+  });
+
+  return message.reply(response.choices[0].message.content);
+}
 
     // ================= NORMAL CHAT =================
     const response = await openai.chat.completions.create({

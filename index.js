@@ -31,6 +31,19 @@ const client = new Client({
   ],
 });
 
+// ================= LOGIN FIRST (CRITICAL FIX) =================
+if (!process.env.DISCORD_TOKEN) {
+  console.error("❌ DISCORD_TOKEN is MISSING");
+}
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => {
+    console.log("✅ Discord login success");
+  })
+  .catch((err) => {
+    console.error("❌ Discord login failed:", err);
+  });
+
 // ================= OPENAI =================
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -79,7 +92,7 @@ client.on("messageCreate", async (message) => {
 
     const user = memory[userId];
 
-    // ================= PROJECT SET =================
+    // ================= SET PROJECT =================
     if (lower.startsWith("project:")) {
       const projectName = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -193,16 +206,3 @@ ${msg}
     return message.reply("❌ Something went wrong.");
   }
 });
-
-// ================= LOGIN DEBUG =================
-if (!process.env.DISCORD_TOKEN) {
-  console.error("❌ DISCORD_TOKEN is MISSING");
-}
-
-client.login(process.env.DISCORD_TOKEN)
-  .then(() => {
-    console.log("✅ Discord login success");
-  })
-  .catch((err) => {
-    console.error("❌ Discord login failed:", err);
-  });

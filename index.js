@@ -15,11 +15,6 @@ process.on("unhandledRejection", (err) => {
   console.error("🔥 PROMISE ERROR:", err);
 });
 
-// ================= DEBUG =================
-console.log("🚀 Starting Harry...");
-console.log("🔍 Discord Token:", !!process.env.DISCORD_TOKEN);
-console.log("🔍 OpenAI Key:", !!process.env.OPENAI_API_KEY);
-
 // ================= EXPRESS =================
 const app = express();
 
@@ -29,7 +24,7 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
+  console.log(`🌐 Server running on ${PORT}`);
 });
 
 // ================= DISCORD =================
@@ -89,30 +84,24 @@ async function searchGoogle(query) {
   }
 }
 
-// ================= 🔒 TEMPLATE LOCK PROMPT =================
+// ================= 🔒 TEMPLATE LOCK =================
 const SYSTEM_PROMPT = `
 You are Harry, a STRICT HTML template editor.
 
-🚨 ABSOLUTE RULES:
+RULES:
 - NEVER change layout
 - NEVER change spacing
-- NEVER reformat HTML
-- NEVER reorder anything
-- NEVER improve or redesign
+- NEVER reformat
+- NEVER redesign
 
-YOU MUST:
-- ONLY replace text values
-- KEEP ALL TAGS EXACT
-- KEEP INDENTATION EXACT
-- KEEP LINE BREAKS EXACT
+ONLY:
+- Replace values
+- Keep everything EXACT
 
 OUTPUT:
-- FULL HTML ONLY
-- NO explanations
+- RAW HTML ONLY
 - NO markdown
-- NO \`\`\`
-
-If unsure → DO NOTHING to structure.
+- NO explanations
 `;
 
 // ================= MESSAGE =================
@@ -120,11 +109,11 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
-    console.log("📩 MESSAGE:", message.content);
-
     const userId = message.author.id;
     let msg = message.content.trim();
     const lower = msg.toLowerCase();
+
+    console.log("📩", msg);
 
     // ================= READ ATTACHMENTS =================
     if (message.attachments.size > 0) {
@@ -133,7 +122,7 @@ client.on("messageCreate", async (message) => {
       if (file.name.endsWith(".html") || file.name.endsWith(".txt")) {
         const res = await axios.get(file.url);
         msg = res.data;
-        console.log("📄 Loaded HTML from attachment");
+        console.log("📄 HTML loaded from attachment");
       }
     }
 
@@ -148,12 +137,11 @@ client.on("messageCreate", async (message) => {
 
     const user = memory[userId];
 
-    // ================= 🌐 INTERNET SEARCH =================
+    // ================= 🌐 SEARCH =================
     const needsSearch =
       lower.includes("latest") ||
       lower.includes("today") ||
       lower.includes("news") ||
-      lower.includes("current") ||
       lower.includes("weather") ||
       lower.includes("price");
 
@@ -163,19 +151,8 @@ client.on("messageCreate", async (message) => {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: "Use real-time search results to answer naturally."
-          },
-          {
-            role: "user",
-            content: `
-Question: ${msg}
-
-Search Results:
-${searchResult}
-            `
-          }
+          { role: "system", content: "Use search results to answer." },
+          { role: "user", content: `${msg}\n\n${searchResult}` }
         ]
       });
 
@@ -196,22 +173,24 @@ ${searchResult}
 
       saveMemory();
 
-      return message.reply(`📁 Project set to: ${projectName}`);
+      if (user.projects[projectName].template) {
+        return message.reply(
+          `📁 Project: ${projectName}\n✅ Template loaded. Ready.`
+        );
+      } else {
+        return message.reply(
+          `📁 Project: ${projectName}\n⚠️ Send HTML template.`
+        );
+      }
     }
 
-    // ================= 💬 NORMAL CHAT =================
+    // ================= NORMAL CHAT =================
     if (!user.currentProject) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: "You are Harry, a friendly and smart assistant."
-          },
-          {
-            role: "user",
-            content: msg
-          }
+          { role: "system", content: "You are Harry, a smart assistant." },
+          { role: "user", content: msg }
         ]
       });
 
@@ -220,26 +199,29 @@ ${searchResult}
 
     const project = user.projects[user.currentProject];
 
-    // ================= 💾 SAVE TEMPLATE =================
-    if (msg.trim().startsWith("<!DOCTYPE html>")) {
+    // ================= SAVE TEMPLATE =================
+    if (msg.startsWith("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
 
-      return message.reply("🧠 Template saved!");
+      return message.reply("🧠 Template saved permanently!");
     }
 
+    // ================= CHECK TEMPLATE =================
     if (!project.template) {
-      return message.reply("⚠️ Send HTML template first.");
+      return message.reply(
+        `⚠️ No template saved for "${user.currentProject}".`
+      );
     }
 
-    // ================= 📦 MULTI PART =================
+    // ================= MULTI PART =================
     if (lower.includes("part")) {
       user.instructions += "\n" + msg;
-      return message.reply("🧙 Waiting for next part...");
+      return message.reply("🧙 Waiting...");
     }
 
-    // ================= ⚡ GENERATE =================
-    if (lower.includes("done") || lower.includes("generate")) {
+    // ================= GENERATE =================
+    if (lower.includes("generate") || lower.includes("done")) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -247,15 +229,12 @@ ${searchResult}
           {
             role: "user",
             content: `
-You MUST follow this template EXACTLY.
-
 TEMPLATE:
 ${project.template}
 
-ONLY replace values using:
-
+INSTRUCTIONS:
 ${user.instructions}
-            `
+`
           }
         ]
       });
@@ -265,7 +244,7 @@ ${user.instructions}
       return message.reply(response.choices[0].message.content);
     }
 
-    // ================= 🔄 APPLY CHANGE =================
+    // ================= APPLY CHANGE =================
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -273,23 +252,21 @@ ${user.instructions}
         {
           role: "user",
           content: `
-You MUST follow this template EXACTLY.
-
 TEMPLATE:
 ${project.template}
 
-Change request:
+CHANGE:
 ${msg}
-          `
+`
         }
       ]
     });
 
     return message.reply(response.choices[0].message.content);
 
-  } catch (error) {
-    console.error("❌ ERROR:", error);
-    return message.reply("⚠️ Something went wrong.");
+  } catch (err) {
+    console.error("❌ ERROR:", err);
+    return message.reply("⚠️ Error occurred.");
   }
 });
 

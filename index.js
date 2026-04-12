@@ -1,6 +1,11 @@
 require("dotenv").config();
 
+const fs = require("fs");
 const express = require("express");
+const { Client, GatewayIntentBits } = require("discord.js");
+const OpenAI = require("openai");
+
+// ================= EXPRESS SERVER (KEEP BOT ALIVE) =================
 const app = express();
 
 app.get("/", (req, res) => {
@@ -9,24 +14,19 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("🌐 Web server running");
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-require("dotenv").config();
-
-const fs = require("fs");
-const { Client, GatewayIntentBits } = require("discord.js");
-const OpenAI = require("openai");
-
-// ================= SETUP =================
+// ================= DISCORD CLIENT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
   ],
 });
 
+// ================= OPENAI =================
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -56,23 +56,25 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
+    console.log("📩 MESSAGE:", message.content);
+
     await message.channel.sendTyping();
 
     const userId = message.author.id;
     const msg = message.content.trim();
     const lower = msg.toLowerCase();
 
-    // INIT USER
+    // INIT USER MEMORY
     if (!memory[userId]) {
       memory[userId] = {
         projects: {},
-        currentProject: null
+        currentProject: null,
       };
     }
 
     const user = memory[userId];
 
-    // ================= PROJECT SWITCH =================
+    // ================= PROJECT SET =================
     if (lower.startsWith("project:")) {
       const projectName = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -86,7 +88,7 @@ client.on("messageCreate", async (message) => {
         user.projects[projectName] = {
           template: "",
           rules: "",
-          notes: ""
+          notes: "",
         };
       }
 
@@ -97,9 +99,14 @@ client.on("messageCreate", async (message) => {
 
     const currentProject = user.currentProject;
 
-    // ================= NO PROJECT =================
+    // ================= NO PROJECT (CHATGPT MODE) =================
     if (!currentProject) {
-      return message.reply("⚠️ Please set a project first using: project: name");
+      const aiResponse = await openai.responses.create({
+        model: "gpt-5.3",
+        input: msg,
+      });
+
+      return message.reply(aiResponse.output_text || "🤖...");
     }
 
     const project = user.projects[currentProject];
@@ -150,32 +157,14 @@ CORE BEHAVIOR:
 - You behave like ChatGPT (smart, helpful, conversational)
 - You also specialize in receipt HTML generation
 
-RECEIPT RULES (VERY STRICT):
-- Output must look like a THERMAL RECEIPT
-- Narrow width layout
-- Clean spacing
-- Proper alignment (left/right columns)
-- Monospaced feel
-- NEVER break structure
-
-PROJECT MEMORY:
-- Follow saved template EXACTLY
-- Apply saved rules
-- Apply saved notes
-
-RESPONSE FORMAT:
-1. First: short acknowledgement (1–2 lines)
-2. Then: full HTML
-
 STRICT RULES:
-- DO NOT redesign layout
-- DO NOT change structure
-- ONLY modify values/content
-- KEEP spacing EXACT
+- Follow template EXACTLY
+- Do NOT change structure
+- Only modify content
 
 OUTPUT:
-Acknowledgement + FULL HTML
-`
+Short reply + FULL HTML
+`,
         },
         {
           role: "user",
@@ -193,9 +182,9 @@ ${project.template}
 
 USER REQUEST:
 ${msg}
-`
-        }
-      ]
+`,
+        },
+      ],
     });
 
     const reply = response.output_text || "No response.";
@@ -203,25 +192,15 @@ ${msg}
     fs.writeFileSync("output.html", reply);
 
     return message.reply({
-      content: "🧙‍♂️ Receipt generated with your project memory.",
-      files: ["output.html"]
+      content: "🧙‍♂️ Receipt generated!",
+      files: ["output.html"],
     });
 
   } catch (error) {
-    console.error("ERROR:", error);
+    console.error("❌ ERROR:", error);
     return message.reply("❌ Something went wrong.");
   }
 });
 
 // ================= LOGIN =================
 client.login(process.env.DISCORD_TOKEN);
-
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("Harry bot is alive!");
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});

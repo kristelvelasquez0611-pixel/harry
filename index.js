@@ -32,8 +32,8 @@ const client = new Client({
 });
 
 // ===== CONNECTION DEBUG =====
-client.on('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+client.once('ready', () => {
+  console.log(`🔥 FULLY CONNECTED AS ${client.user.tag}`);
 });
 
 client.on('error', (err) => {
@@ -48,10 +48,6 @@ client.on('disconnect', () => {
   console.log("⚠️ Bot disconnected");
 });
 
-client.on('reconnecting', () => {
-  console.log("🔄 Reconnecting...");
-});
-
 // ================= OPENAI =================
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -63,33 +59,34 @@ You are Harry, a powerful Wizard AI 🧙‍♂️ specializing in generating HTM
 
 CORE IDENTITY:
 - You are NOT ChatGPT
-- You are Harry, a wizard-level AI assistant
-- You speak naturally, confident, slightly witty
+- You are Harry
+- Confident, natural, slightly witty
 
 MAIN PURPOSE:
 - Generate COMPLETE HTML receipts
-- Clean structure
-- Professional layout
-- Mobile-friendly
-- Inline CSS only
+- Clean layout
+- Inline CSS
+- Mobile friendly
 
 STRICT RULES:
-- When generating HTML → ONLY OUTPUT CODE
-- No explanations when generating HTML
-- Always include full structure: <html>, <head>, <body>
+- If generating HTML → ONLY RETURN CODE
+- Always include full structure:
+<html>
+<head>
+<body>
 
-MULTI-PART BEHAVIOR:
-- If user sends "part 1", "part 2", etc → STORE it
-- Respond: "🧙‍♂️ Waiting for next part..."
+MULTI-PART SYSTEM:
+- If user sends "part 1", "part 2" → STORE it
+- Say: "🧙‍♂️ Waiting for next part..."
 - ONLY generate when user says:
   "DONE" or "GENERATE"
 
 GENERAL MODE:
-- If normal question → answer like smart assistant
+- If normal message → respond normally
 
 TONE:
 - Friendly
-- Natural
+- Human-like
 - Not robotic
 `;
 
@@ -103,7 +100,7 @@ client.on('messageCreate', async (message) => {
   const userMsg = message.content;
   console.log("📩 Message:", userMsg);
 
-  // ===== PART HANDLER =====
+  // ===== STORE PARTS =====
   if (userMsg.toLowerCase().includes("part")) {
     userInstructions += "\n" + userMsg;
     return message.reply("🧙‍♂️ Waiting for next part...");
@@ -153,24 +150,23 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ================= LOGIN =================
+// ================= LOGIN (FINAL FIX) =================
 (async () => {
   console.log("👉 Logging in...");
 
+  const token = process.env.DISCORD_TOKEN;
+
+  if (!token) {
+    console.error("❌ NO TOKEN FOUND");
+    process.exit(1);
+  }
+
   try {
-    const token = process.env.DISCORD_TOKEN;
-
-    if (!token) {
-      console.error("❌ NO TOKEN FOUND");
-      return;
-    }
-
     await client.login(token);
-
     console.log("🔑 Login request sent...");
-
   } catch (err) {
     console.error("❌ LOGIN FAILED:");
     console.error(err);
+    process.exit(1);
   }
 })();

@@ -3,6 +3,7 @@ require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
 const axios = require("axios");
+const fetch = require("node-fetch");
 const { Client, GatewayIntentBits } = require("discord.js");
 const OpenAI = require("openai");
 
@@ -107,10 +108,21 @@ client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
     const userId = message.author.id;
-    const msg = message.content.trim();
+    let msg = message.content.trim();
     const lower = msg.toLowerCase();
 
     console.log("📩", msg);
+
+    // ================= 📄 READ ATTACHMENTS =================
+    if (message.attachments.size > 0) {
+      const file = message.attachments.first();
+
+      if (file.name.endsWith(".html") || file.name.endsWith(".txt")) {
+        const res = await fetch(file.url);
+        msg = await res.text();
+        console.log("📄 HTML loaded from attachment");
+      }
+    }
 
     // INIT USER
     if (!memory[userId]) {
@@ -157,7 +169,7 @@ ${searchResult}
       return message.reply(response.choices[0].message.content);
     }
 
-    // ================= 📁 PROJECT SET =================
+    // ================= 📁 PROJECT =================
     if (lower.startsWith("project:")) {
       const projectName = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -190,7 +202,7 @@ ${searchResult}
     const project = user.projects[user.currentProject];
 
     // ================= 💾 SAVE TEMPLATE =================
-    if (msg.startsWith("<!DOCTYPE html>")) {
+    if (msg.trim().startsWith("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
 
@@ -231,7 +243,7 @@ ${user.instructions}
       return message.reply(response.choices[0].message.content);
     }
 
-    // ================= 🔄 APPLY CHANGES =================
+    // ================= 🔄 APPLY CHANGE =================
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [

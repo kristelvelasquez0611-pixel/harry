@@ -1,30 +1,8 @@
-const axios = require("axios");
-
-async function searchGoogle(query) {
-  try {
-    const res = await axios.post(
-      "https://google.serper.dev/search",
-      { q: query },
-      {
-        headers: {
-          "X-API-KEY": process.env.SERPER_API_KEY,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    const results = res.data.organic.slice(0, 3);
-
-    return results.map(r => `${r.title}\n${r.snippet}`).join("\n\n");
-
-  } catch (err) {
-    return "Search failed.";
-  }
-}
 require("dotenv").config();
 
 const fs = require("fs");
 const express = require("express");
+const axios = require("axios");
 const { Client, GatewayIntentBits } = require("discord.js");
 const OpenAI = require("openai");
 
@@ -33,7 +11,7 @@ console.log("🚀 Starting Harry...");
 console.log("🔍 Discord Token:", !!process.env.DISCORD_TOKEN);
 console.log("🔍 OpenAI Key:", !!process.env.OPENAI_API_KEY);
 
-// ================= EXPRESS (RENDER FIX) =================
+// ================= EXPRESS =================
 const app = express();
 
 app.get("/", (req, res) => {
@@ -78,19 +56,52 @@ function saveMemory() {
   fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
 }
 
+// ================= GOOGLE SEARCH =================
+async function searchGoogle(query) {
+  try {
+    const res = await axios.post(
+      "https://google.serper.dev/search",
+      { q: query },
+      {
+        headers: {
+          "X-API-KEY": process.env.SERPER_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const results = res.data.organic?.slice(0, 3) || [];
+
+    return results.map(r => `${r.title}\n${r.snippet}`).join("\n\n");
+
+  } catch (err) {
+    console.error("Search error:", err);
+    return "No live data found.";
+  }
+}
+
 // ================= SYSTEM PROMPT =================
 const SYSTEM_PROMPT = `
-You are Harry, a smart AI that edits HTML receipts.
+You are Harry, an intelligent AI assistant.
 
-RULES:
+MODES:
+1. Normal Chat → talk like ChatGPT
+2. Project Mode → edit HTML receipts
+
+RULES (Project Mode):
 - DO NOT change layout
 - DO NOT change spacing
 - ONLY replace values
 - KEEP structure EXACT
 - OUTPUT RAW HTML ONLY (NO \`\`\`)
+
+PERSONALITY:
+- Friendly
+- Smart
+- Natural
 `;
 
-// ================= MESSAGE HANDLER =================
+// ================= MESSAGE =================
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
@@ -112,7 +123,41 @@ client.on("messageCreate", async (message) => {
 
     const user = memory[userId];
 
-    // ================= PROJECT =================
+    // ================= 🌐 INTERNET SEARCH =================
+    const needsSearch =
+      lower.includes("latest") ||
+      lower.includes("today") ||
+      lower.includes("news") ||
+      lower.includes("current") ||
+      lower.includes("weather") ||
+      lower.includes("price");
+
+    if (needsSearch) {
+      const searchResult = await searchGoogle(msg);
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Use real-time search results to answer naturally."
+          },
+          {
+            role: "user",
+            content: `
+Question: ${msg}
+
+Search Results:
+${searchResult}
+            `
+          }
+        ]
+      });
+
+      return message.reply(response.choices[0].message.content);
+    }
+
+    // ================= 📁 PROJECT SET =================
     if (lower.startsWith("project:")) {
       const projectName = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -129,13 +174,22 @@ client.on("messageCreate", async (message) => {
       return message.reply(`📁 Project set to: ${projectName}`);
     }
 
+    // ================= 💬 NORMAL CHAT =================
     if (!user.currentProject) {
-      return message.reply("⚠️ Set project first: project: name");
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: msg }
+        ]
+      });
+
+      return message.reply(response.choices[0].message.content);
     }
 
     const project = user.projects[user.currentProject];
 
-    // ================= SAVE TEMPLATE =================
+    // ================= 💾 SAVE TEMPLATE =================
     if (msg.startsWith("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
@@ -147,86 +201,50 @@ client.on("messageCreate", async (message) => {
       return message.reply("⚠️ Send HTML template first.");
     }
 
-    // ================= MULTI PART =================
+    // ================= 📦 MULTI-PART =================
     if (lower.includes("part")) {
       user.instructions += "\n" + msg;
       return message.reply("🧙‍♂️ Waiting for next part...");
     }
 
-    // ================= GENERATE =================
+    // ================= ⚡ GENERATE =================
     if (lower.includes("done") || lower.includes("generate")) {
-      try {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: `
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `
 Template:
 ${project.template}
 
 Instructions:
 ${user.instructions}
-              `
-            }
-          ]
-        });
+            `
+          }
+        ]
+      });
 
-        user.instructions = "";
+      user.instructions = "";
 
-        return message.reply(response.choices[0].message.content);
-      } catch (err) {
-        console.error(err);
-        return message.reply("❌ Failed to generate.");
-      }
+      return message.reply(response.choices[0].message.content);
     }
-// ================= INTERNET SEARCH =================
-const needsSearch =
-  lower.includes("latest") ||
-  lower.includes("today") ||
-  lower.includes("news") ||
-  lower.includes("current") ||
-  lower.includes("weather") ||
-  lower.includes("price");
 
-if (needsSearch) {
-  const searchResult = await searchGoogle(msg);
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: "Use real-time search results to answer the user."
-      },
-      {
-        role: "user",
-        content: `
-User question:
-${msg}
-
-Search results:
-${searchResult}
-        `
-      }
-    ]
-  });
-
-  return message.reply(response.choices[0].message.content);
-}
-
-    // ================= NORMAL CHAT =================
+    // ================= 🔄 APPLY CHANGES =================
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: "You are Harry, a friendly and smart assistant."
-        },
+        { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: msg
+          content: `
+Template:
+${project.template}
+
+Change request:
+${msg}
+          `
         }
       ]
     });

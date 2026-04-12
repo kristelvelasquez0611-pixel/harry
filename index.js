@@ -1,9 +1,22 @@
 import 'dotenv/config';
+import express from 'express';
 import { Client, GatewayIntentBits } from 'discord.js';
 
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+// 👇 THIS FIXES RENDER
+app.get('/', (req, res) => {
+  res.send('Bot is alive!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
+});
+
+// DISCORD BOT
 console.log("🚀 Starting bot...");
 
-// Create client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -12,23 +25,20 @@ const client = new Client({
   ],
 });
 
-// When bot is ready
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// When message received
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  console.log("📩 Message received:", message.content);
+  console.log("📩 Message:", message.content);
 
   if (message.content.toLowerCase() === 'hello') {
     message.reply('Hello! I am alive 🤖');
   }
 });
 
-// LOGIN (VERY IMPORTANT)
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log("🔑 Login success"))
   .catch(err => console.error("❌ Login error:", err));

@@ -2,7 +2,9 @@ import 'dotenv/config';
 import express from 'express';
 import { Client, GatewayIntentBits } from 'discord.js';
 
-// EXPRESS SERVER (REQUIRED FOR RENDER)
+// =========================
+// 🌐 EXPRESS SERVER (RENDER FIX)
+// =========================
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -14,8 +16,13 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-// DISCORD BOT
+// =========================
+// 🤖 DISCORD BOT
+// =========================
 console.log("🚀 Starting bot...");
+
+// Check token
+console.log("🔍 Token check:", process.env.DISCORD_TOKEN ? "EXISTS" : "MISSING");
 
 const client = new Client({
   intents: [
@@ -25,10 +32,12 @@ const client = new Client({
   ],
 });
 
+// When bot is ready
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
+// When message is received
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
 
@@ -39,6 +48,12 @@ client.on('messageCreate', (message) => {
   }
 });
 
+// =========================
+// 🔐 LOGIN (WITH DEBUG)
+// =========================
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log("🔑 Login success"))
-  .catch(err => console.error("❌ Login error:", err));
+  .catch(err => {
+    console.error("❌ LOGIN FAILED:");
+    console.error(err);
+  });

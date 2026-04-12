@@ -2,10 +2,10 @@ import 'dotenv/config';
 import express from 'express';
 import { Client, GatewayIntentBits } from 'discord.js';
 
+// EXPRESS SERVER (REQUIRED FOR RENDER)
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// 👇 THIS FIXES RENDER
 app.get('/', (req, res) => {
   res.send('Bot is alive!');
 });
@@ -29,7 +29,7 @@ client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-client.on('messageCreate', async (message) => {
+client.on('messageCreate', (message) => {
   if (message.author.bot) return;
 
   console.log("📩 Message:", message.content);

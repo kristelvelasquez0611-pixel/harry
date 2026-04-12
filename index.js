@@ -2,12 +2,10 @@ import 'dotenv/config';
 import express from 'express';
 import { Client, GatewayIntentBits } from 'discord.js';
 
-// =========================
-// 🤖 DISCORD BOT FIRST
-// =========================
 console.log("🚀 Starting bot...");
 console.log("🔍 Token check:", process.env.DISCORD_TOKEN ? "EXISTS" : "MISSING");
 
+// DISCORD BOT
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -30,7 +28,7 @@ client.on('messageCreate', (message) => {
   }
 });
 
-// 🔥 FORCE LOGIN EARLY
+// 🔥 LOGIN
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log("🔑 Login success"))
   .catch(err => {
@@ -38,9 +36,7 @@ client.login(process.env.DISCORD_TOKEN)
     console.error(err);
   });
 
-// =========================
-// 🌐 EXPRESS SERVER AFTER
-// =========================
+// EXPRESS (AFTER LOGIN)
 const app = express();
 const PORT = process.env.PORT || 10000;
 

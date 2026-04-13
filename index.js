@@ -9,7 +9,7 @@ const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
-app.get("/", (req, res) => res.send("🧙 Harry is alive"));
+app.get("/", (req, res) => res.send("🧙 Harry Queue UI Running"));
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("🌐 Server running"));
 
@@ -29,8 +29,8 @@ const openai = new OpenAI({
 
 // ================= MEMORY =================
 let memory = {
-  projects: {},   // shared templates
-  users: {}       // per-user project selection
+  projects: {},
+  users: {}
 };
 
 if (fs.existsSync("memory.json")) {
@@ -72,15 +72,26 @@ client.on("messageCreate", async (message) => {
 
   await message.react("👀");
 
-  queue.push(async () => {
-    let typing = true;
-    const typingInterval = setInterval(() => {
-      if (typing) message.channel.sendTyping();
-    }, 3000);
+  // ================= QUEUE POSITION =================
+  const position = queue.length + 1;
 
+  const statusMsg = await message.reply(
+    `👀 Got your request!\n⏳ Queue position: #${position}`
+  );
+
+  // ================= TYPING (IMMEDIATE) =================
+  let typing = true;
+  const typingInterval = setInterval(() => {
+    if (typing) message.channel.sendTyping();
+  }, 3000);
+
+  queue.push(async () => {
     try {
       const userId = message.author.id;
       const msg = message.content.trim();
+
+      // ================= PROCESSING STATUS =================
+      await statusMsg.edit("⚙️ Processing your request...");
 
       // INIT USER
       if (!memory.users[userId]) {
@@ -104,7 +115,7 @@ client.on("messageCreate", async (message) => {
         typing = false;
         clearInterval(typingInterval);
 
-        return message.reply(`📁 Project set to: ${name}`);
+        return statusMsg.edit(`📁 Project set to: ${name}`);
       }
 
       // ================= GET PROJECT =================
@@ -113,7 +124,7 @@ client.on("messageCreate", async (message) => {
       if (!project) {
         typing = false;
         clearInterval(typingInterval);
-        return message.reply("⚠️ Set project first: project: name");
+        return statusMsg.edit("⚠️ Set project first: project: name");
       }
 
       // ================= TEMPLATE VIA FILE =================
@@ -130,7 +141,7 @@ client.on("messageCreate", async (message) => {
           typing = false;
           clearInterval(typingInterval);
 
-          return message.reply(`🧠 Template saved for: ${user.currentProject}`);
+          return statusMsg.edit(`🧠 Template saved for: ${user.currentProject}`);
         }
       }
 
@@ -142,13 +153,13 @@ client.on("messageCreate", async (message) => {
         typing = false;
         clearInterval(typingInterval);
 
-        return message.reply(`🧠 Template updated for: ${user.currentProject}`);
+        return statusMsg.edit(`🧠 Template updated for: ${user.currentProject}`);
       }
 
       if (!project.template) {
         typing = false;
         clearInterval(typingInterval);
-        return message.reply("⚠️ No template yet.");
+        return statusMsg.edit("⚠️ No template yet.");
       }
 
       // ================= GENERATE =================
@@ -210,7 +221,7 @@ ${msg}
       if (!html) {
         typing = false;
         clearInterval(typingInterval);
-        return message.reply("⚠️ Failed to generate.");
+        return statusMsg.edit("⚠️ Failed to generate.");
       }
 
       fs.writeFileSync("output.html", html);
@@ -218,14 +229,14 @@ ${msg}
       typing = false;
       clearInterval(typingInterval);
 
-      return message.reply({
-        content: `📄 Done (${user.currentProject})`,
+      return statusMsg.edit({
+        content: `✅ Done (${user.currentProject})`,
         files: ["output.html"]
       });
 
     } catch (err) {
       console.error(err);
-      return message.reply("❌ Error");
+      return statusMsg.edit("❌ Error occurred.");
     }
   });
 

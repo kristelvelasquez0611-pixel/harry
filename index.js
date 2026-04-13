@@ -9,7 +9,7 @@ const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
-app.get("/", (req, res) => res.send("🧠 Harry HTML Wizard Running"));
+app.get("/", (req, res) => res.send("🧠 Harry Team Mode Running"));
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("🌐 Server running"));
 
@@ -28,7 +28,10 @@ const openai = new OpenAI({
 });
 
 // ================= MEMORY =================
-let memory = {};
+let memory = {
+  projects: {},   // 🔥 shared templates
+  users: {}       // 🔥 per-user project selection
+};
 
 if (fs.existsSync("memory.json")) {
   memory = JSON.parse(fs.readFileSync("memory.json"));
@@ -40,7 +43,7 @@ function saveMemory() {
 
 // ================= READY =================
 client.once("ready", () => {
-  console.log(`🔥 Harry is LIVE as ${client.user.tag}`);
+  console.log(`🔥 Harry (TEAM MODE) is LIVE as ${client.user.tag}`);
 });
 
 // ================= MAIN =================
@@ -59,23 +62,22 @@ client.on("messageCreate", async (message) => {
     const msg = message.content.trim();
 
     // INIT USER
-    if (!memory[userId]) {
-      memory[userId] = {
-        projects: {},
+    if (!memory.users[userId]) {
+      memory.users[userId] = {
         currentProject: null
       };
     }
 
-    const user = memory[userId];
+    const user = memory.users[userId];
 
-    // ================= PROJECT =================
+    // ================= SET PROJECT =================
     if (msg.toLowerCase().startsWith("project:")) {
       const name = msg.split(":")[1]?.trim().toLowerCase();
 
       user.currentProject = name;
 
-      if (!user.projects[name]) {
-        user.projects[name] = {
+      if (!memory.projects[name]) {
+        memory.projects[name] = {
           template: null
         };
       }
@@ -88,7 +90,7 @@ client.on("messageCreate", async (message) => {
       return message.reply(`📁 Project set to: ${name}`);
     }
 
-    const project = user.projects[user.currentProject];
+    const project = memory.projects[user.currentProject];
 
     if (!project) {
       typing = false;
@@ -96,7 +98,7 @@ client.on("messageCreate", async (message) => {
       return message.reply("⚠️ Set project first: project: name");
     }
 
-    // ================= HANDLE FILE TEMPLATE =================
+    // ================= FILE TEMPLATE =================
     if (message.attachments.size > 0) {
       const attachment = message.attachments.first();
 
@@ -110,11 +112,11 @@ client.on("messageCreate", async (message) => {
         typing = false;
         clearInterval(typingInterval);
 
-        return message.reply("🧠 Template saved permanently!");
+        return message.reply(`🧠 Template saved for project: ${user.currentProject}`);
       }
     }
 
-    // ================= HANDLE PASTED HTML =================
+    // ================= PASTED TEMPLATE =================
     if (msg.includes("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
@@ -122,16 +124,16 @@ client.on("messageCreate", async (message) => {
       typing = false;
       clearInterval(typingInterval);
 
-      return message.reply("🧠 Template learned.");
+      return message.reply(`🧠 Template updated for project: ${user.currentProject}`);
     }
 
     if (!project.template) {
       typing = false;
       clearInterval(typingInterval);
-      return message.reply("⚠️ Send HTML template first.");
+      return message.reply("⚠️ This project has no template yet.");
     }
 
-    // ================= HARRY HTML WIZARD =================
+    // ================= GENERATE =================
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -141,42 +143,32 @@ client.on("messageCreate", async (message) => {
           content: `
 You are Harry, an HTML Wizard.
 
-You operate in STRICT TEMPLATE LOCK MODE.
+STRICT TEMPLATE MODE:
 
-CORE RULE:
-Follow template EXACTLY. Do not redesign.
+- Follow template EXACTLY
+- Do NOT redesign
+- Do NOT change layout
+- Do NOT change spacing
 
-DO NOT:
-- change layout
-- change spacing
-- change alignment
-- add/remove sections
-
-ONLY:
-- replace data values
+ONLY replace values.
 
 MULTI-ITEM:
-Duplicate item block ONLY if multiple items exist.
+Repeat item block only.
 
-QR:
-Only update if exists.
-
-PIN:
+QR & PIN:
 Only update if exists.
 
 OUTPUT:
-Return FULL HTML only.
+Full HTML only.
 `
         },
         {
           role: "user",
           content: `
-REFERENCE TEMPLATE:
+TEMPLATE:
 ${project.template}
 
----
-
-GENERATE RECEIPT USING THIS DATA:
+DATA:
 ${msg}
 `
         }
@@ -185,36 +177,20 @@ ${msg}
 
     let reply = response.choices?.[0]?.message?.content;
 
-    // ================= QR FIX =================
-    const qrMatch = msg.match(/\[QR\]\s*([\d\s]+)/);
-    if (qrMatch && reply) {
-      const qrValue = qrMatch[1].trim();
-
-      reply = reply.replace(
-        /https:\/\/api\.qrserver\.com\/v1\/create-qr-code\/\?size=\d+x\d+&data=.*?/g,
-        `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${qrValue}`
-      );
-    }
+    // ================= SEND AS FILE =================
+    fs.writeFileSync("output.html", reply);
 
     typing = false;
     clearInterval(typingInterval);
 
-    if (!reply) {
-      return message.reply("⚠️ Failed to generate.");
-    }
-
-    // ================= FILE OUTPUT FIX =================
-    fs.writeFileSync("output.html", reply);
-
     return message.reply({
-      content: "📄 Receipt generated (download below):",
+      content: `📄 Receipt generated for project: ${user.currentProject}`,
       files: ["output.html"]
     });
 
   } catch (error) {
-    console.error("❌ ERROR:", error);
-
-    return message.reply("❌ Something went wrong.");
+    console.error(error);
+    return message.reply("❌ Error occurred.");
   }
 });
 

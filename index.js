@@ -9,7 +9,7 @@ const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
-app.get("/", (req, res) => res.send("🧠 Harry Team Mode Running"));
+app.get("/", (req, res) => res.send("🧙 Harry is alive"));
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("🌐 Server running"));
 
@@ -29,8 +29,8 @@ const openai = new OpenAI({
 
 // ================= MEMORY =================
 let memory = {
-  projects: {},   // 🔥 shared templates
-  users: {}       // 🔥 per-user project selection
+  projects: {},   // shared templates
+  users: {}       // per-user project selection
 };
 
 if (fs.existsSync("memory.json")) {
@@ -41,9 +41,29 @@ function saveMemory() {
   fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
 }
 
+// ================= QUEUE =================
+let queue = [];
+let processing = false;
+
+async function processQueue() {
+  if (processing || queue.length === 0) return;
+
+  processing = true;
+  const job = queue.shift();
+
+  try {
+    await job();
+  } catch (err) {
+    console.error("QUEUE ERROR:", err);
+  }
+
+  processing = false;
+  processQueue();
+}
+
 // ================= READY =================
 client.once("ready", () => {
-  console.log(`🔥 Harry (TEAM MODE) is LIVE as ${client.user.tag}`);
+  console.log(`🔥 Harry is LIVE as ${client.user.tag}`);
 });
 
 // ================= MAIN =================
@@ -52,146 +72,164 @@ client.on("messageCreate", async (message) => {
 
   await message.react("👀");
 
-  let typing = true;
-  const typingInterval = setInterval(() => {
-    if (typing) message.channel.sendTyping();
-  }, 3000);
+  queue.push(async () => {
+    let typing = true;
+    const typingInterval = setInterval(() => {
+      if (typing) message.channel.sendTyping();
+    }, 3000);
 
-  try {
-    const userId = message.author.id;
-    const msg = message.content.trim();
+    try {
+      const userId = message.author.id;
+      const msg = message.content.trim();
 
-    // INIT USER
-    if (!memory.users[userId]) {
-      memory.users[userId] = {
-        currentProject: null
-      };
-    }
-
-    const user = memory.users[userId];
-
-    // ================= SET PROJECT =================
-    if (msg.toLowerCase().startsWith("project:")) {
-      const name = msg.split(":")[1]?.trim().toLowerCase();
-
-      user.currentProject = name;
-
-      if (!memory.projects[name]) {
-        memory.projects[name] = {
-          template: null
-        };
+      // INIT USER
+      if (!memory.users[userId]) {
+        memory.users[userId] = { currentProject: null };
       }
 
-      saveMemory();
+      const user = memory.users[userId];
 
-      typing = false;
-      clearInterval(typingInterval);
+      // ================= SET PROJECT =================
+      if (msg.toLowerCase().startsWith("project:")) {
+        const name = msg.split(":")[1]?.trim().toLowerCase();
 
-      return message.reply(`📁 Project set to: ${name}`);
-    }
+        user.currentProject = name;
 
-    const project = memory.projects[user.currentProject];
+        if (!memory.projects[name]) {
+          memory.projects[name] = { template: null };
+        }
 
-    if (!project) {
-      typing = false;
-      clearInterval(typingInterval);
-      return message.reply("⚠️ Set project first: project: name");
-    }
-
-    // ================= FILE TEMPLATE =================
-    if (message.attachments.size > 0) {
-      const attachment = message.attachments.first();
-
-      if (attachment.name.endsWith(".html")) {
-        const res = await fetch(attachment.url);
-        const html = await res.text();
-
-        project.template = html;
         saveMemory();
 
         typing = false;
         clearInterval(typingInterval);
 
-        return message.reply(`🧠 Template saved for project: ${user.currentProject}`);
+        return message.reply(`📁 Project set to: ${name}`);
       }
-    }
 
-    // ================= PASTED TEMPLATE =================
-    if (msg.includes("<!DOCTYPE html>")) {
-      project.template = msg;
-      saveMemory();
+      // ================= GET PROJECT =================
+      const project = memory.projects[user.currentProject];
 
-      typing = false;
-      clearInterval(typingInterval);
+      if (!project) {
+        typing = false;
+        clearInterval(typingInterval);
+        return message.reply("⚠️ Set project first: project: name");
+      }
 
-      return message.reply(`🧠 Template updated for project: ${user.currentProject}`);
-    }
+      // ================= TEMPLATE VIA FILE =================
+      if (message.attachments.size > 0) {
+        const file = message.attachments.first();
 
-    if (!project.template) {
-      typing = false;
-      clearInterval(typingInterval);
-      return message.reply("⚠️ This project has no template yet.");
-    }
+        if (file.name.endsWith(".html")) {
+          const res = await fetch(file.url);
+          const html = await res.text();
 
-    // ================= GENERATE =================
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: `
-You are Harry, an HTML Wizard.
+          project.template = html;
+          saveMemory();
 
-STRICT TEMPLATE MODE:
+          typing = false;
+          clearInterval(typingInterval);
 
-- Follow template EXACTLY
-- Do NOT redesign
-- Do NOT change layout
-- Do NOT change spacing
+          return message.reply(`🧠 Template saved for: ${user.currentProject}`);
+        }
+      }
 
-ONLY replace values.
+      // ================= TEMPLATE VIA PASTE =================
+      if (msg.includes("<!DOCTYPE html>")) {
+        project.template = msg;
+        saveMemory();
+
+        typing = false;
+        clearInterval(typingInterval);
+
+        return message.reply(`🧠 Template updated for: ${user.currentProject}`);
+      }
+
+      if (!project.template) {
+        typing = false;
+        clearInterval(typingInterval);
+        return message.reply("⚠️ No template yet.");
+      }
+
+      // ================= GENERATE =================
+      const response = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: `
+You are Harry, an HTML receipt wizard.
+
+🚨 ULTRA STRICT TEMPLATE LOCK MODE 🚨
+
+RULES:
+- DO NOT change structure
+- DO NOT change spacing
+- DO NOT change alignment
+- DO NOT change CSS
+- DO NOT change classes
+
+ONLY replace TEXT VALUES.
+
+BASE64:
+- DO NOT modify base64 images
 
 MULTI-ITEM:
-Repeat item block only.
+- Duplicate existing item block only
 
-QR & PIN:
-Only update if exists.
+QR / PIN:
+- Update value only
+
+POLICY:
+- KEEP EXACT format including <br>
 
 OUTPUT:
-Full HTML only.
+- FULL HTML ONLY
+- NO markdown
+- NO explanation
+
+FAIL IF YOU MODIFY STRUCTURE
 `
-        },
-        {
-          role: "user",
-          content: `
+          },
+          {
+            role: "user",
+            content: `
 TEMPLATE:
 ${project.template}
 
 DATA:
 ${msg}
 `
-        }
-      ]
-    });
+          }
+        ]
+      });
 
-    let reply = response.choices?.[0]?.message?.content;
+      const html = response.choices?.[0]?.message?.content;
 
-    // ================= SEND AS FILE =================
-    fs.writeFileSync("output.html", reply);
+      if (!html) {
+        typing = false;
+        clearInterval(typingInterval);
+        return message.reply("⚠️ Failed to generate.");
+      }
 
-    typing = false;
-    clearInterval(typingInterval);
+      fs.writeFileSync("output.html", html);
 
-    return message.reply({
-      content: `📄 Receipt generated for project: ${user.currentProject}`,
-      files: ["output.html"]
-    });
+      typing = false;
+      clearInterval(typingInterval);
 
-  } catch (error) {
-    console.error(error);
-    return message.reply("❌ Error occurred.");
-  }
+      return message.reply({
+        content: `📄 Done (${user.currentProject})`,
+        files: ["output.html"]
+      });
+
+    } catch (err) {
+      console.error(err);
+      return message.reply("❌ Error");
+    }
+  });
+
+  processQueue();
 });
 
 // ================= LOGIN =================

@@ -143,94 +143,29 @@ You are Harry, an HTML Wizard.
 
 You operate in STRICT TEMPLATE LOCK MODE.
 
----
-
 CORE RULE:
+Follow template EXACTLY. Do not redesign.
 
-You are given a reference HTML template.
+DO NOT:
+- change layout
+- change spacing
+- change alignment
+- add/remove sections
 
-You MUST:
-✔ Follow structure EXACTLY
-✔ Follow spacing EXACTLY
-✔ Follow alignment EXACTLY
-✔ Follow layout EXACTLY
+ONLY:
+- replace data values
 
----
+MULTI-ITEM:
+Duplicate item block ONLY if multiple items exist.
 
-YOU MUST NOT:
+QR:
+Only update if exists.
 
-❌ Add new sections
-❌ Remove sections
-❌ Redesign layout
-❌ Change CSS
-❌ Change spacing
-❌ Convert structure (no tables unless template uses it)
-
----
-
-DATA RULE:
-
-✔ Replace ONLY data that exists in the template
-✔ DO NOT add new fields
-✔ DO NOT invent sections
-
----
-
-PROJECT LOGIC:
-
-✔ Each project has its own template
-✔ ALWAYS follow that template only
-
----
-
-QR RULE:
-
-✔ ONLY update QR if it exists in template
-✔ KEEP same placement and structure
-
----
-
-PIN RULE:
-
-✔ ONLY update PIN if it exists
-✔ DO NOT add if missing
-
----
-
-MULTI-ITEM RULE (ONLY EXCEPTION):
-
-You are allowed to duplicate ONLY the item section.
-
-Item section includes:
-- item row
-- item description
-- tax row
-
-If multiple items exist:
-✔ Repeat SAME structure
-✔ Keep spacing EXACT
-
-DO NOT duplicate:
-- header
-- totals
-- policy
-- payment
-- QR
-
----
+PIN:
+Only update if exists.
 
 OUTPUT:
-
-✔ FULL HTML ONLY
-✔ NO markdown
-✔ NO explanation
-
----
-
-FINAL BEHAVIOR:
-
-Template = LAW
-You ONLY inject data.
+Return FULL HTML only.
 `
         },
         {
@@ -250,7 +185,7 @@ ${msg}
 
     let reply = response.choices?.[0]?.message?.content;
 
-    // ================= SAFE QR REPLACEMENT =================
+    // ================= QR FIX =================
     const qrMatch = msg.match(/\[QR\]\s*([\d\s]+)/);
     if (qrMatch && reply) {
       const qrValue = qrMatch[1].trim();
@@ -268,7 +203,13 @@ ${msg}
       return message.reply("⚠️ Failed to generate.");
     }
 
-    return message.reply(reply);
+    // ================= FILE OUTPUT FIX =================
+    fs.writeFileSync("output.html", reply);
+
+    return message.reply({
+      content: "📄 Receipt generated (download below):",
+      files: ["output.html"]
+    });
 
   } catch (error) {
     console.error("❌ ERROR:", error);

@@ -1,31 +1,17 @@
 require("dotenv").config();
 
+global.fetch = require("node-fetch");
+
 const fs = require("fs");
-const express = require("express");
-const axios = require("axios");
 const { Client, GatewayIntentBits } = require("discord.js");
+const express = require("express");
 const OpenAI = require("openai");
 
-// ================= CRASH PROTECTION =================
-process.on("uncaughtException", (err) => {
-  console.error("🔥 UNCAUGHT ERROR:", err);
-});
-
-process.on("unhandledRejection", (err) => {
-  console.error("🔥 PROMISE ERROR:", err);
-});
-
-// ================= EXPRESS =================
+// ================= SERVER =================
 const app = express();
-
-app.get("/", (req, res) => {
-  res.send("🧙‍♂️ Harry is alive!");
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🌐 Server running on ${PORT}`);
-});
+app.get("/", (req, res) => res.send("🧠 Harry HTML Wizard Running"));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("🌐 Server running"));
 
 // ================= DISCORD =================
 const client = new Client({
@@ -33,240 +19,261 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ],
-});
-
-client.once("ready", () => {
-  console.log(`🔥 CONNECTED AS ${client.user.tag}`);
+  ]
 });
 
 // ================= OPENAI =================
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // ================= MEMORY =================
 let memory = {};
 
 if (fs.existsSync("memory.json")) {
-  try {
-    memory = JSON.parse(fs.readFileSync("memory.json"));
-  } catch {
-    memory = {};
-  }
+  memory = JSON.parse(fs.readFileSync("memory.json"));
 }
 
 function saveMemory() {
   fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
 }
 
-// ================= GOOGLE SEARCH =================
-async function searchGoogle(query) {
-  try {
-    const res = await axios.post(
-      "https://google.serper.dev/search",
-      { q: query },
-      {
-        headers: {
-          "X-API-KEY": process.env.SERPER_API_KEY,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+// ================= READY =================
+client.once("ready", () => {
+  console.log(`🔥 Harry is LIVE as ${client.user.tag}`);
+});
 
-    const results = res.data.organic?.slice(0, 3) || [];
-
-    return results.map(r => `${r.title}\n${r.snippet}`).join("\n\n");
-
-  } catch (err) {
-    console.error("Search error:", err);
-    return "No live data found.";
-  }
-}
-
-// ================= 🔒 TEMPLATE LOCK =================
-const SYSTEM_PROMPT = `
-You are Harry, a STRICT HTML template editor.
-
-RULES:
-- NEVER change layout
-- NEVER change spacing
-- NEVER reformat
-- NEVER redesign
-
-ONLY:
-- Replace values
-- Keep everything EXACT
-
-OUTPUT:
-- RAW HTML ONLY
-- NO markdown
-- NO explanations
-`;
-
-// ================= MESSAGE =================
+// ================= MAIN =================
 client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
+  await message.react("👀");
+
+  let typing = true;
+  const typingInterval = setInterval(() => {
+    if (typing) message.channel.sendTyping();
+  }, 3000);
+
   try {
-    if (message.author.bot) return;
-
     const userId = message.author.id;
-    let msg = message.content.trim();
-    const lower = msg.toLowerCase();
-
-    console.log("📩", msg);
-
-    // ================= READ ATTACHMENTS =================
-    if (message.attachments.size > 0) {
-      const file = message.attachments.first();
-
-      if (file.name.endsWith(".html") || file.name.endsWith(".txt")) {
-        const res = await axios.get(file.url);
-        msg = res.data;
-        console.log("📄 HTML loaded from attachment");
-      }
-    }
+    const msg = message.content.trim();
 
     // INIT USER
     if (!memory[userId]) {
       memory[userId] = {
         projects: {},
-        currentProject: null,
-        instructions: ""
+        currentProject: null
       };
     }
 
     const user = memory[userId];
 
-    // ================= 🌐 SEARCH =================
-    const needsSearch =
-      lower.includes("latest") ||
-      lower.includes("today") ||
-      lower.includes("news") ||
-      lower.includes("weather") ||
-      lower.includes("price");
+    // ================= PROJECT =================
+    if (msg.toLowerCase().startsWith("project:")) {
+      const name = msg.split(":")[1]?.trim().toLowerCase();
 
-    if (needsSearch) {
-      const searchResult = await searchGoogle(msg);
+      user.currentProject = name;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Use search results to answer." },
-          { role: "user", content: `${msg}\n\n${searchResult}` }
-        ]
-      });
-
-      return message.reply(response.choices[0].message.content);
-    }
-
-    // ================= 📁 PROJECT =================
-    if (lower.startsWith("project:")) {
-      const projectName = msg.split(":")[1]?.trim().toLowerCase();
-
-      user.currentProject = projectName;
-
-      if (!user.projects[projectName]) {
-        user.projects[projectName] = {
+      if (!user.projects[name]) {
+        user.projects[name] = {
           template: null
         };
       }
 
       saveMemory();
 
-      if (user.projects[projectName].template) {
-        return message.reply(
-          `📁 Project: ${projectName}\n✅ Template loaded. Ready.`
-        );
-      } else {
-        return message.reply(
-          `📁 Project: ${projectName}\n⚠️ Send HTML template.`
-        );
-      }
-    }
+      typing = false;
+      clearInterval(typingInterval);
 
-    // ================= NORMAL CHAT =================
-    if (!user.currentProject) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are Harry, a smart assistant." },
-          { role: "user", content: msg }
-        ]
-      });
-
-      return message.reply(response.choices[0].message.content);
+      return message.reply(`📁 Project set to: ${name}`);
     }
 
     const project = user.projects[user.currentProject];
 
-    // ================= SAVE TEMPLATE =================
-    if (msg.startsWith("<!DOCTYPE html>")) {
+    if (!project) {
+      typing = false;
+      clearInterval(typingInterval);
+      return message.reply("⚠️ Set project first: project: name");
+    }
+
+    // ================= HANDLE FILE TEMPLATE =================
+    if (message.attachments.size > 0) {
+      const attachment = message.attachments.first();
+
+      if (attachment.name.endsWith(".html")) {
+        const res = await fetch(attachment.url);
+        const html = await res.text();
+
+        project.template = html;
+        saveMemory();
+
+        typing = false;
+        clearInterval(typingInterval);
+
+        return message.reply("🧠 Template saved permanently!");
+      }
+    }
+
+    // ================= HANDLE PASTED HTML =================
+    if (msg.includes("<!DOCTYPE html>")) {
       project.template = msg;
       saveMemory();
 
-      return message.reply("🧠 Template saved permanently!");
+      typing = false;
+      clearInterval(typingInterval);
+
+      return message.reply("🧠 Template learned.");
     }
 
-    // ================= CHECK TEMPLATE =================
     if (!project.template) {
-      return message.reply(
-        `⚠️ No template saved for "${user.currentProject}".`
-      );
+      typing = false;
+      clearInterval(typingInterval);
+      return message.reply("⚠️ Send HTML template first.");
     }
 
-    // ================= MULTI PART =================
-    if (lower.includes("part")) {
-      user.instructions += "\n" + msg;
-      return message.reply("🧙 Waiting...");
-    }
-
-    // ================= GENERATE =================
-    if (lower.includes("generate") || lower.includes("done")) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `
-TEMPLATE:
-${project.template}
-
-INSTRUCTIONS:
-${user.instructions}
-`
-          }
-        ]
-      });
-
-      user.instructions = "";
-
-      return message.reply(response.choices[0].message.content);
-    }
-
-    // ================= APPLY CHANGE =================
+    // ================= HARRY HTML WIZARD =================
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "system",
+          content: `
+You are Harry, an HTML Wizard.
+
+You operate in STRICT TEMPLATE LOCK MODE.
+
+---
+
+CORE RULE:
+
+You are given a reference HTML template.
+
+You MUST:
+✔ Follow structure EXACTLY
+✔ Follow spacing EXACTLY
+✔ Follow alignment EXACTLY
+✔ Follow layout EXACTLY
+
+---
+
+YOU MUST NOT:
+
+❌ Add new sections
+❌ Remove sections
+❌ Redesign layout
+❌ Change CSS
+❌ Change spacing
+❌ Convert structure (no tables unless template uses it)
+
+---
+
+DATA RULE:
+
+✔ Replace ONLY data that exists in the template
+✔ DO NOT add new fields
+✔ DO NOT invent sections
+
+---
+
+PROJECT LOGIC:
+
+✔ Each project has its own template
+✔ ALWAYS follow that template only
+
+---
+
+QR RULE:
+
+✔ ONLY update QR if it exists in template
+✔ KEEP same placement and structure
+
+---
+
+PIN RULE:
+
+✔ ONLY update PIN if it exists
+✔ DO NOT add if missing
+
+---
+
+MULTI-ITEM RULE (ONLY EXCEPTION):
+
+You are allowed to duplicate ONLY the item section.
+
+Item section includes:
+- item row
+- item description
+- tax row
+
+If multiple items exist:
+✔ Repeat SAME structure
+✔ Keep spacing EXACT
+
+DO NOT duplicate:
+- header
+- totals
+- policy
+- payment
+- QR
+
+---
+
+OUTPUT:
+
+✔ FULL HTML ONLY
+✔ NO markdown
+✔ NO explanation
+
+---
+
+FINAL BEHAVIOR:
+
+Template = LAW
+You ONLY inject data.
+`
+        },
         {
           role: "user",
           content: `
-TEMPLATE:
+REFERENCE TEMPLATE:
 ${project.template}
 
-CHANGE:
+---
+
+GENERATE RECEIPT USING THIS DATA:
 ${msg}
 `
         }
       ]
     });
 
-    return message.reply(response.choices[0].message.content);
+    let reply = response.choices?.[0]?.message?.content;
 
-  } catch (err) {
-    console.error("❌ ERROR:", err);
-    return message.reply("⚠️ Error occurred.");
+    // ================= SAFE QR REPLACEMENT =================
+    const qrMatch = msg.match(/\[QR\]\s*([\d\s]+)/);
+    if (qrMatch && reply) {
+      const qrValue = qrMatch[1].trim();
+
+      reply = reply.replace(
+        /https:\/\/api\.qrserver\.com\/v1\/create-qr-code\/\?size=\d+x\d+&data=.*?/g,
+        `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${qrValue}`
+      );
+    }
+
+    typing = false;
+    clearInterval(typingInterval);
+
+    if (!reply) {
+      return message.reply("⚠️ Failed to generate.");
+    }
+
+    return message.reply(reply);
+
+  } catch (error) {
+    console.error("❌ ERROR:", error);
+
+    return message.reply("❌ Something went wrong.");
   }
 });
 

@@ -1,7 +1,20 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
-const fs = require("fs");
 
+global.fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
+const fs = require("fs");
+const { Client, GatewayIntentBits } = require("discord.js");
+const express = require("express");
+const OpenAI = require("openai");
+
+// ================= SERVER =================
+const app = express();
+app.get("/", (req, res) => res.send("🧠 Harry Live Queue + ETA Running"));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("🌐 Server running"));
+
+// ================= DISCORD =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -10,80 +23,200 @@ const client = new Client({
   ]
 });
 
-// ===== MEMORY =====
-let memory = {
-  projects: {}, // shared templates
-  users: {}     // per-user project
-};
-
-// ===== START =====
-client.once("clientReady", () => {
-  console.log("🔥 Harry is LIVE");
+// ================= OPENAI =================
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// ===== HELPER: GET USER PROJECT =====
-function getUserProject(userId) {
-  return memory.users[userId]?.project;
+// ================= MEMORY =================
+let memory = { projects: {}, users: {} };
+
+if (fs.existsSync("memory.json")) {
+  memory = JSON.parse(fs.readFileSync("memory.json"));
 }
 
-// ===== HELPER: SET PROJECT =====
-function setUserProject(userId, project) {
-  if (!memory.users[userId]) memory.users[userId] = {};
-  memory.users[userId].project = project;
+function saveMemory() {
+  fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
 }
 
-// ===== HELPER: EXTRACT DATA =====
-function parseData(text) {
-  const data = {};
-  const lines = text.split("\n");
+// ================= ETA FUNCTION =================
+function getETA(position) {
+  const secondsPerJob = 15; // adjust if needed
+  const eta = position * secondsPerJob;
+  return `~${eta} seconds`;
+}
 
-  lines.forEach(line => {
-    const match = line.match(/^(.*?):\s*(.*)$/);
-    if (match) {
-      const key = match[1].trim().toUpperCase().replace(/\s+/g, "_");
-      const value = match[2].trim();
-      data[key] = value;
+// ================= QUEUE =================
+let queue = [];
+let isProcessing = false;
+
+// 🔄 LIVE QUEUE UPDATE
+async function updateQueueUI() {
+  for (let i = 0; i < queue.length; i++) {
+    const job = queue[i];
+    const position = i + 1;
+    const eta = getETA(position);
+
+    let text = `⏳ Queue position: #${position}\n⏱ Estimated wait: ${eta}`;
+
+    if (position === 1) {
+      text += "\n🟡 You are next...";
+    } else {
+      text += "\n⬆️ Moving up...";
     }
-  });
 
-  return data;
+    try {
+      await job.statusMsg.edit(`👀 Got your request!\n${text}`);
+    } catch {}
+  }
 }
 
-// ===== HELPER: REPLACE VALUES =====
-function applyTemplate(template, data) {
-  let output = template;
+// 🔄 PROCESS QUEUE
+async function processQueue() {
+  if (isProcessing || queue.length === 0) return;
 
-  Object.keys(data).forEach(key => {
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, data[key]);
-  });
+  isProcessing = true;
 
-  return output;
+  const job = queue.shift();
+  const { message, user, project, msg, statusMsg } = job;
+
+  // update queue positions
+  updateQueueUI();
+
+  let typing = true;
+  const typingInterval = setInterval(() => {
+    if (typing) message.channel.sendTyping().catch(() => {});
+  }, 3000);
+
+  let timeout;
+
+  try {
+    // ⏰ TIMEOUT
+    timeout = setTimeout(() => {
+      typing = false;
+      clearInterval(typingInterval);
+      statusMsg.edit("⏰ Request timed out. Try again.");
+    }, 60000);
+
+    // ⚙️ PROCESSING
+    await statusMsg.edit("⚙️ Processing your request...");
+
+    // 📄 GENERATING
+    await statusMsg.edit("📄 Generating HTML...");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: `
+You are Harry, an HTML Wizard.
+
+STRICT TEMPLATE LOCK MODE:
+
+DO NOT:
+- change layout
+- change spacing
+- change alignment
+- remove anything
+
+ONLY:
+- replace values
+- duplicate item blocks if needed
+
+Return FULL HTML only.
+`
+        },
+        {
+          role: "user",
+          content: `
+TEMPLATE:
+${project.template}
+
+DATA:
+${msg}
+`
+        }
+      ]
+    });
+
+    const html = response.choices?.[0]?.message?.content;
+
+    if (!html) {
+      clearTimeout(timeout);
+      typing = false;
+      clearInterval(typingInterval);
+      return statusMsg.edit("⚠️ Failed to generate.");
+    }
+
+    // ✅ UNIQUE FILE
+    const fileName = `output_${message.author.id}_${Date.now()}.html`;
+    fs.writeFileSync(fileName, html);
+
+    clearTimeout(timeout);
+    typing = false;
+    clearInterval(typingInterval);
+
+    await statusMsg.edit({
+      content: `✅ Done (${user.project})`,
+      files: [fileName]
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    clearTimeout(timeout);
+    typing = false;
+    clearInterval(typingInterval);
+
+    await statusMsg.edit("❌ Error occurred.");
+  }
+
+  isProcessing = false;
+  processQueue();
 }
 
-// ===== MAIN =====
+// ================= READY =================
+client.once("ready", () => {
+  console.log(`🔥 Harry LIVE QUEUE + ETA MODE as ${client.user.tag}`);
+});
+
+// ================= MAIN =================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  const content = message.content.trim();
-
-  // 👀 react = seen
   await message.react("👀").catch(() => {});
 
-  // ===== SET PROJECT =====
-  if (content.toLowerCase().startsWith("project:")) {
-    const project = content.split(":")[1].trim().toLowerCase();
-    setUserProject(message.author.id, project);
+  const userId = message.author.id;
+  const msg = message.content.trim();
 
-    await message.reply(`📁 Project set to: ${project}`);
-    return;
+  // INIT USER
+  if (!memory.users[userId]) {
+    memory.users[userId] = { project: null };
   }
 
-  const project = getUserProject(message.author.id);
+  const user = memory.users[userId];
+
+  // ===== SET PROJECT =====
+  if (msg.toLowerCase().startsWith("project:")) {
+    const name = msg.split(":")[1]?.trim().toLowerCase();
+
+    user.project = name;
+
+    if (!memory.projects[name]) {
+      memory.projects[name] = { template: null };
+    }
+
+    saveMemory();
+
+    return message.reply(`📁 Project set to: ${name}`);
+  }
+
+  const project = memory.projects[user.project];
 
   if (!project) {
-    await message.reply("⚠️ Set project first: `project: name`");
-    return;
+    return message.reply("⚠️ Set project first.");
   }
 
   // ===== SAVE TEMPLATE =====
@@ -94,44 +227,41 @@ client.on("messageCreate", async (message) => {
       const res = await fetch(file.url);
       const html = await res.text();
 
-      memory.projects[project] = html;
+      project.template = html;
+      saveMemory();
 
-      await message.reply(`🧠 Template saved for: ${project}`);
-      return;
+      return message.reply("🧠 Template saved!");
     }
   }
 
-  // ===== GENERATE (REPLACE ONLY) =====
-  if (content.toLowerCase().includes("generate")) {
+  // ===== PASTE HTML =====
+  if (msg.includes("<!DOCTYPE html>")) {
+    project.template = msg;
+    saveMemory();
 
-    const template = memory.projects[project];
+    return message.reply("🧠 Template learned.");
+  }
 
-    if (!template) {
-      await message.reply("⚠️ No template saved.");
-      return;
-    }
+  if (!project.template) {
+    return message.reply("⚠️ Send HTML template first.");
+  }
 
-    await message.channel.sendTyping();
+  // ===== GENERATE =====
+  if (msg.toLowerCase().includes("generate")) {
 
-    try {
-      const data = parseData(content);
-      const output = applyTemplate(template, data);
+    const position = queue.length + 1;
+    const eta = getETA(position);
 
-      fs.writeFileSync("output.html", output);
+    const statusMsg = await message.reply(
+      `👀 Got your request!\n⏳ Queue position: #${position}\n⏱ Estimated wait: ${eta}`
+    );
 
-      await message.reply({
-        content: `✅ Done (${project})`,
-        files: ["output.html"]
-      });
+    queue.push({ message, user, project, msg, statusMsg });
 
-    } catch (err) {
-      console.error(err);
-      await message.reply("❌ Error processing template.");
-    }
-
-    return;
+    updateQueueUI();
+    processQueue();
   }
 });
 
-// ===== LOGIN =====
+// ================= LOGIN =================
 client.login(process.env.DISCORD_TOKEN);

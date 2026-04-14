@@ -1,6 +1,7 @@
 require("dotenv").config();
 
-global.fetch = require("node-fetch");
+global.fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const fs = require("fs");
 const { Client, GatewayIntentBits } = require("discord.js");
@@ -9,7 +10,7 @@ const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
-app.get("/", (req, res) => res.send("🧙 Harry Queue UI Running"));
+app.get("/", (req, res) => res.send("🧙 Harry is running"));
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("🌐 Server running"));
 
@@ -28,10 +29,7 @@ const openai = new OpenAI({
 });
 
 // ================= MEMORY =================
-let memory = {
-  projects: {},
-  users: {}
-};
+let memory = { projects: {}, users: {} };
 
 if (fs.existsSync("memory.json")) {
   memory = JSON.parse(fs.readFileSync("memory.json"));
@@ -70,27 +68,36 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  await message.react("👀");
+  await message.react("👀").catch(() => {});
 
-  // ================= QUEUE POSITION =================
   const position = queue.length + 1;
 
   const statusMsg = await message.reply(
     `👀 Got your request!\n⏳ Queue position: #${position}`
   );
 
-  // ================= TYPING (IMMEDIATE) =================
   let typing = true;
   const typingInterval = setInterval(() => {
     if (typing) message.channel.sendTyping();
   }, 3000);
 
   queue.push(async () => {
+    let timeout;
+
     try {
       const userId = message.author.id;
       const msg = message.content.trim();
 
-      // ================= PROCESSING STATUS =================
+      // ⏰ TIMEOUT PROTECTION
+      timeout = setTimeout(() => {
+        console.log("⏰ TIMEOUT");
+
+        typing = false;
+        clearInterval(typingInterval);
+
+        statusMsg.edit("⏰ Request timed out. Try again.");
+      }, 60000);
+
       await statusMsg.edit("⚙️ Processing your request...");
 
       // INIT USER
@@ -112,59 +119,74 @@ client.on("messageCreate", async (message) => {
 
         saveMemory();
 
+        clearTimeout(timeout);
         typing = false;
         clearInterval(typingInterval);
 
         return statusMsg.edit(`📁 Project set to: ${name}`);
       }
 
-      // ================= GET PROJECT =================
       const project = memory.projects[user.currentProject];
 
       if (!project) {
+        clearTimeout(timeout);
         typing = false;
         clearInterval(typingInterval);
-        return statusMsg.edit("⚠️ Set project first: project: name");
+        return statusMsg.edit("⚠️ Set project first.");
       }
 
-      // ================= TEMPLATE VIA FILE =================
+      // ================= TEMPLATE FILE =================
       if (message.attachments.size > 0) {
         const file = message.attachments.first();
 
-        if (file.name.endsWith(".html")) {
+        if (file.name.toLowerCase().endsWith(".html")) {
+          await statusMsg.edit("📥 Saving template...");
+
           const res = await fetch(file.url);
           const html = await res.text();
 
           project.template = html;
           saveMemory();
 
+          clearTimeout(timeout);
           typing = false;
           clearInterval(typingInterval);
 
           return statusMsg.edit(`🧠 Template saved for: ${user.currentProject}`);
+        } else {
+          clearTimeout(timeout);
+          typing = false;
+          clearInterval(typingInterval);
+
+          return statusMsg.edit("⚠️ Upload a valid .html file.");
         }
       }
 
-      // ================= TEMPLATE VIA PASTE =================
+      // ================= TEMPLATE PASTE =================
       if (msg.includes("<!DOCTYPE html>")) {
         project.template = msg;
         saveMemory();
 
+        clearTimeout(timeout);
         typing = false;
         clearInterval(typingInterval);
 
-        return statusMsg.edit(`🧠 Template updated for: ${user.currentProject}`);
+        return statusMsg.edit(`🧠 Template updated.`);
       }
 
       if (!project.template) {
+        clearTimeout(timeout);
         typing = false;
         clearInterval(typingInterval);
+
         return statusMsg.edit("⚠️ No template yet.");
       }
 
       // ================= GENERATE =================
+      await statusMsg.edit("📄 Generating HTML...");
+
       const response = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
+        model: "gpt-4o-mini",
         temperature: 0,
         messages: [
           {
@@ -172,35 +194,21 @@ client.on("messageCreate", async (message) => {
             content: `
 You are Harry, an HTML receipt wizard.
 
-🚨 ULTRA STRICT TEMPLATE LOCK MODE 🚨
-
-RULES:
-- DO NOT change structure
+STRICT RULES:
+- DO NOT change layout
 - DO NOT change spacing
-- DO NOT change alignment
-- DO NOT change CSS
-- DO NOT change classes
-
-ONLY replace TEXT VALUES.
-
-BASE64:
-- DO NOT modify base64 images
+- DO NOT change structure
+- ONLY replace values
 
 MULTI-ITEM:
-- Duplicate existing item block only
+- Duplicate existing item block
 
-QR / PIN:
-- Update value only
-
-POLICY:
-- KEEP EXACT format including <br>
+BASE64:
+- DO NOT modify
 
 OUTPUT:
 - FULL HTML ONLY
-- NO markdown
 - NO explanation
-
-FAIL IF YOU MODIFY STRUCTURE
 `
           },
           {
@@ -219,6 +227,7 @@ ${msg}
       const html = response.choices?.[0]?.message?.content;
 
       if (!html) {
+        clearTimeout(timeout);
         typing = false;
         clearInterval(typingInterval);
         return statusMsg.edit("⚠️ Failed to generate.");
@@ -226,6 +235,7 @@ ${msg}
 
       fs.writeFileSync("output.html", html);
 
+      clearTimeout(timeout);
       typing = false;
       clearInterval(typingInterval);
 
@@ -236,6 +246,11 @@ ${msg}
 
     } catch (err) {
       console.error(err);
+
+      clearTimeout(timeout);
+      typing = false;
+      clearInterval(typingInterval);
+
       return statusMsg.edit("❌ Error occurred.");
     }
   });

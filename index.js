@@ -10,7 +10,7 @@ const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
-app.get("/", (req, res) => res.send("🧠 Harry Live Queue + ETA Running"));
+app.get("/", (req, res) => res.send("🧠 Harry (Hyeri Brain) Running"));
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("🌐 Server running"));
 
@@ -39,31 +39,25 @@ function saveMemory() {
   fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
 }
 
-// ================= ETA FUNCTION =================
+// ================= ETA =================
 function getETA(position) {
-  const secondsPerJob = 15; // adjust if needed
-  const eta = position * secondsPerJob;
-  return `~${eta} seconds`;
+  return `~${position * 10} seconds`;
 }
 
 // ================= QUEUE =================
 let queue = [];
 let isProcessing = false;
 
-// 🔄 LIVE QUEUE UPDATE
 async function updateQueueUI() {
   for (let i = 0; i < queue.length; i++) {
     const job = queue[i];
-    const position = i + 1;
-    const eta = getETA(position);
+    const pos = i + 1;
+    const eta = getETA(pos);
 
-    let text = `⏳ Queue position: #${position}\n⏱ Estimated wait: ${eta}`;
+    let text = `⏳ Queue position: #${pos}\n⏱ ETA: ${eta}`;
 
-    if (position === 1) {
-      text += "\n🟡 You are next...";
-    } else {
-      text += "\n⬆️ Moving up...";
-    }
+    if (pos === 1) text += "\n🟡 You are next...";
+    else text += "\n⬆️ Moving up...";
 
     try {
       await job.statusMsg.edit(`👀 Got your request!\n${text}`);
@@ -71,7 +65,7 @@ async function updateQueueUI() {
   }
 }
 
-// 🔄 PROCESS QUEUE
+// ================= PROCESS =================
 async function processQueue() {
   if (isProcessing || queue.length === 0) return;
 
@@ -80,7 +74,6 @@ async function processQueue() {
   const job = queue.shift();
   const { message, user, project, msg, statusMsg } = job;
 
-  // update queue positions
   updateQueueUI();
 
   let typing = true;
@@ -88,42 +81,35 @@ async function processQueue() {
     if (typing) message.channel.sendTyping().catch(() => {});
   }, 3000);
 
-  let timeout;
-
   try {
-    // ⏰ TIMEOUT
-    timeout = setTimeout(() => {
-      typing = false;
-      clearInterval(typingInterval);
-      statusMsg.edit("⏰ Request timed out. Try again.");
-    }, 60000);
-
-    // ⚙️ PROCESSING
-    await statusMsg.edit("⚙️ Processing your request...");
-
-    // 📄 GENERATING
-    await statusMsg.edit("📄 Generating HTML...");
+    await statusMsg.edit("⚙️ Understanding template...");
+    await statusMsg.edit("📄 Generating receipt...");
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0,
+      temperature: 0.3,
       messages: [
         {
           role: "system",
           content: `
-You are Harry, an HTML Wizard.
+You are Harry, an expert HTML receipt generator.
 
-STRICT TEMPLATE LOCK MODE:
+You behave like a human designer recreating receipts.
 
-DO NOT:
-- change layout
-- change spacing
-- change alignment
-- remove anything
+RULES:
+- Follow the provided template EXACTLY in layout and structure
+- Keep spacing, alignment, and visual flow identical
+- DO NOT redesign or modernize
+- DO NOT add new sections
 
-ONLY:
-- replace values
-- duplicate item blocks if needed
+ALLOWED:
+- Replace all values using the provided data
+- Generate multiple items by repeating the same visual structure
+- Adjust content naturally while preserving layout
+
+IMPORTANT:
+- Think like recreating the SAME receipt with different data
+- Preserve thermal receipt look
 
 Return FULL HTML only.
 `
@@ -143,20 +129,13 @@ ${msg}
 
     const html = response.choices?.[0]?.message?.content;
 
-    if (!html) {
-      clearTimeout(timeout);
-      typing = false;
-      clearInterval(typingInterval);
-      return statusMsg.edit("⚠️ Failed to generate.");
-    }
-
-    // ✅ UNIQUE FILE
-    const fileName = `output_${message.author.id}_${Date.now()}.html`;
-    fs.writeFileSync(fileName, html);
-
-    clearTimeout(timeout);
     typing = false;
     clearInterval(typingInterval);
+
+    if (!html) return statusMsg.edit("⚠️ Failed to generate.");
+
+    const fileName = `output_${Date.now()}.html`;
+    fs.writeFileSync(fileName, html);
 
     await statusMsg.edit({
       content: `✅ Done (${user.project})`,
@@ -165,11 +144,6 @@ ${msg}
 
   } catch (err) {
     console.error(err);
-
-    clearTimeout(timeout);
-    typing = false;
-    clearInterval(typingInterval);
-
     await statusMsg.edit("❌ Error occurred.");
   }
 
@@ -179,7 +153,7 @@ ${msg}
 
 // ================= READY =================
 client.once("ready", () => {
-  console.log(`🔥 Harry LIVE QUEUE + ETA MODE as ${client.user.tag}`);
+  console.log(`🔥 Harry (Hyeri Brain) as ${client.user.tag}`);
 });
 
 // ================= MAIN =================
@@ -191,14 +165,13 @@ client.on("messageCreate", async (message) => {
   const userId = message.author.id;
   const msg = message.content.trim();
 
-  // INIT USER
   if (!memory.users[userId]) {
     memory.users[userId] = { project: null };
   }
 
   const user = memory.users[userId];
 
-  // ===== SET PROJECT =====
+  // SET PROJECT
   if (msg.toLowerCase().startsWith("project:")) {
     const name = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -219,7 +192,7 @@ client.on("messageCreate", async (message) => {
     return message.reply("⚠️ Set project first.");
   }
 
-  // ===== SAVE TEMPLATE =====
+  // SAVE TEMPLATE
   if (message.attachments.size > 0) {
     const file = message.attachments.first();
 
@@ -234,11 +207,10 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ===== PASTE HTML =====
+  // PASTE HTML
   if (msg.includes("<!DOCTYPE html>")) {
     project.template = msg;
     saveMemory();
-
     return message.reply("🧠 Template learned.");
   }
 
@@ -246,14 +218,14 @@ client.on("messageCreate", async (message) => {
     return message.reply("⚠️ Send HTML template first.");
   }
 
-  // ===== GENERATE =====
+  // GENERATE
   if (msg.toLowerCase().includes("generate")) {
 
     const position = queue.length + 1;
     const eta = getETA(position);
 
     const statusMsg = await message.reply(
-      `👀 Got your request!\n⏳ Queue position: #${position}\n⏱ Estimated wait: ${eta}`
+      `👀 Got your request!\n⏳ Queue position: #${position}\n⏱ ETA: ${eta}`
     );
 
     queue.push({ message, user, project, msg, statusMsg });

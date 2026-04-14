@@ -92,24 +92,14 @@ async function processQueue() {
         {
           role: "system",
           content: `
-You are Harry, an expert HTML receipt generator.
+You are Harry, an expert HTML generator.
 
-You behave like a human designer recreating receipts.
-
-RULES:
-- Follow the provided template EXACTLY in layout and structure
-- Keep spacing, alignment, and visual flow identical
-- DO NOT redesign or modernize
-- DO NOT add new sections
-
-ALLOWED:
-- Replace all values using the provided data
-- Generate multiple items by repeating the same visual structure
-- Adjust content naturally while preserving layout
-
-IMPORTANT:
-- Think like recreating the SAME receipt with different data
-- Preserve thermal receipt look
+STRICT RULES:
+- Follow template EXACTLY
+- Do NOT change layout
+- Do NOT redesign
+- Only replace allowed content
+- Preserve spacing and structure
 
 Return FULL HTML only.
 `
@@ -163,7 +153,7 @@ client.on("messageCreate", async (message) => {
   await message.react("👀").catch(() => {});
 
   const userId = message.author.id;
-  const msg = message.content.trim();
+  let msg = message.content.trim();
 
   if (!memory.users[userId]) {
     memory.users[userId] = { project: null };
@@ -171,7 +161,40 @@ client.on("messageCreate", async (message) => {
 
   const user = memory.users[userId];
 
-  // SET PROJECT
+  // ================= TXT FILE READER =================
+  if (message.attachments.size > 0) {
+    const file = message.attachments.first();
+
+    // 👉 READ TXT FILE
+    if (file.name.endsWith(".txt")) {
+      try {
+        const res = await fetch(file.url);
+        const text = await res.text();
+
+        msg = text; // 🔥 gamitin as command input
+        await message.reply("📄 TXT file loaded!");
+      } catch (err) {
+        console.error(err);
+        return message.reply("❌ Failed to read TXT file.");
+      }
+    }
+
+    // 👉 SAVE TEMPLATE (HTML)
+    if (file.name.endsWith(".html")) {
+      const res = await fetch(file.url);
+      const html = await res.text();
+
+      const project = memory.projects[user.project];
+      if (!project) return message.reply("⚠️ Set project first.");
+
+      project.template = html;
+      saveMemory();
+
+      return message.reply("🧠 Template saved!");
+    }
+  }
+
+  // ================= SET PROJECT =================
   if (msg.toLowerCase().startsWith("project:")) {
     const name = msg.split(":")[1]?.trim().toLowerCase();
 
@@ -192,22 +215,7 @@ client.on("messageCreate", async (message) => {
     return message.reply("⚠️ Set project first.");
   }
 
-  // SAVE TEMPLATE
-  if (message.attachments.size > 0) {
-    const file = message.attachments.first();
-
-    if (file.name.endsWith(".html")) {
-      const res = await fetch(file.url);
-      const html = await res.text();
-
-      project.template = html;
-      saveMemory();
-
-      return message.reply("🧠 Template saved!");
-    }
-  }
-
-  // PASTE HTML
+  // ================= PASTE TEMPLATE =================
   if (msg.includes("<!DOCTYPE html>")) {
     project.template = msg;
     saveMemory();
@@ -218,7 +226,7 @@ client.on("messageCreate", async (message) => {
     return message.reply("⚠️ Send HTML template first.");
   }
 
-  // GENERATE
+  // ================= GENERATE =================
   if (msg.toLowerCase().includes("generate")) {
 
     const position = queue.length + 1;

@@ -1,3 +1,4 @@
+throw new Error("🚨 FORCE DEPLOY TEST");
 console.log("🚀 HARRY NEW VERSION LOADED");
 require("dotenv").config();
 

@@ -1,3 +1,4 @@
+console.log("🚀 HARRY NEW VERSION LOADED");
 require("dotenv").config();
 
 global.fetch = (...args) =>
@@ -94,14 +95,23 @@ async function processQueue() {
           content: `
 You are Harry, an expert HTML generator.
 
-STRICT RULES:
+STRICT RULES (NO EXCEPTIONS):
+- You MUST NOT remove ANY text from the template
+- You MUST NOT summarize, shorten, or skip lines
+- Every sentence in the template MUST appear in the output
+- Even repeated or similar text MUST be preserved
+- DO NOT clean or optimize content
+- DO NOT remove boilerplate text
 - Follow template EXACTLY
 - Do NOT change layout
 - Do NOT redesign
 - Only replace allowed content
 - Preserve spacing and structure
 
-Return FULL HTML only.
+You are NOT allowed to decide what is important.
+You are ONLY allowed to replace values.
+
+Return FULL HTML exactly as template, with replaced values only.
 `
         },
         {
@@ -148,12 +158,24 @@ client.once("ready", () => {
 
 // ================= MAIN =================
 client.on("messageCreate", async (message) => {
+
+  console.log("📩 MESSAGE:", message.content); // 
+
   if (message.author.bot) return;
 
-  await message.react("👀").catch(() => {});
+  const botId = client.user.id;
+
+  const isRealMention =
+    message.content.includes(`<@${botId}>`) ||
+    message.content.includes(`<@!${botId}>`);
+
+  if (!isRealMention) return;
+
+  let msg = message.content
+    .replace(/<@!?\d+>/g, "")
+    .trim();
 
   const userId = message.author.id;
-  let msg = message.content.trim();
 
   if (!memory.users[userId]) {
     memory.users[userId] = { project: null };

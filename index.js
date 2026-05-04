@@ -1,6 +1,22 @@
 console.log("🚀 HARRY NEW VERSION LOADED");
 require("dotenv").config();
 
+function formatMoneyFixed(value, width = 8) {
+  const num = Number(value).toFixed(2);
+  const FIGURE_SPACE = " "; // invisible spacing
+  return num.padStart(width, FIGURE_SPACE);
+}
+
+function autoAlignNumbers(html) {
+  return html.replace(/([\d,]+\.\d{2}-?)/g, (match) => {
+    const isNegative = match.endsWith("-");
+    const clean = match.replace("-", "").replace(",", "");
+
+    const formatted = formatMoneyFixed(clean);
+
+    return isNegative ? formatted + "-" : formatted;
+  });
+}
 global.fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -127,7 +143,10 @@ ${msg}
       ]
     });
 
-    const html = response.choices?.[0]?.message?.content;
+    let html = response.choices?.[0]?.message?.content;
+
+// 🔥 AUTO ALIGN ALL NUMBERS
+html = autoAlignNumbers(html);
 
     typing = false;
     clearInterval(typingInterval);

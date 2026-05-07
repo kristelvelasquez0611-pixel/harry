@@ -157,7 +157,8 @@ html = autoAlignNumbers(html);
     fs.writeFileSync(fileName, html);
 
     await statusMsg.edit({
-      content: `✅ Done (${user.project})`,
+      content: `✅ Done (${memory.currentProject})`,
+
       files: [fileName]
     });
 
@@ -196,11 +197,8 @@ client.on("messageCreate", async (message) => {
 
   const userId = message.author.id;
 
-  if (!memory.users[userId]) {
-    memory.users[userId] = { project: null };
-  }
-
-  const user = memory.users[userId];
+  const currentProject = memory.currentProject;
+  const project = memory.projects[currentProject];
 
   // ================= TXT FILE READER =================
   if (message.attachments.size > 0) {
@@ -239,7 +237,15 @@ client.on("messageCreate", async (message) => {
   if (msg.toLowerCase().startsWith("project:")) {
     const name = msg.split(":")[1]?.trim().toLowerCase();
 
-    user.project = name;
+    memory.currentProject = name;
+
+if (!memory.projects[name]) {
+  memory.projects[name] = { template: null };
+}
+
+saveMemory();
+
+return message.reply(`📁 Global project set to: ${name}`);
 
     if (!memory.projects[name]) {
       memory.projects[name] = { template: null };
@@ -250,7 +256,7 @@ client.on("messageCreate", async (message) => {
     return message.reply(`📁 Project set to: ${name}`);
   }
 
-  const project = memory.projects[user.project];
+  const project = memory.projects[memory.currentProject];
 
   if (!project) {
     return message.reply("⚠️ Set project first.");

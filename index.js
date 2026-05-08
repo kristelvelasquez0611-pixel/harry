@@ -104,45 +104,38 @@ return match ? match[1].trim() : "";
 
 function parseFields(text) {
 
-const fields = {};
+  const fields = {};
 
-const regex =
-/([A-Z0-9_]+)\s*=\s*(.+)/g;
+  const regex =
+    /([A-Z0-9_]+)\s*=\s*(.+)/g;
 
-let match;
+  let match;
 
-while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
 
-```
-fields[
-  match[1].trim()
-] = match[2].trim();
-```
+    fields[
+      match[1].trim()
+    ] = match[2].trim();
+  }
 
-}
-
-return fields;
+  return fields;
 }
 
 function replacePlaceholders(html, data) {
 
-for (const key in data) {
+  for (const key in data) {
 
-```
-html = html.replace(
-  new RegExp(
-    `{{${key}}}`,
-    "g"
-  ),
-  data[key]
-);
-```
+    html = html.replace(
+      new RegExp(
+        "\\{\\{" + key + "\\}\\}",
+        "g"
+      ),
+      data[key]
+    );
+  }
 
+  return html;
 }
-
-return html;
-}
-
 // ================= PROCESS =================
 async function processQueue() {
 if (isProcessing || queue.length === 0) return;

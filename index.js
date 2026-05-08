@@ -152,6 +152,7 @@ async function processQueue() {
   try {
     await statusMsg.edit("⚙️ Understanding template...");
     await statusMsg.edit("📄 Generating receipt...");
+
 const data = parseFields(msg);
 
 let html = project.template;
@@ -161,9 +162,7 @@ html = replacePlaceholders(
   data
 );
 
-// 🔥 AUTO ALIGN ALL NUMBERS
 html = autoAlignNumbers(html);
-
     typing = false;
     clearInterval(typingInterval);
 

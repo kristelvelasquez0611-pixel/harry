@@ -93,7 +93,7 @@ function extractPlaceholders(html) {
 function getValue(tag, text) {
 
 const regex = new RegExp(
-\\[${tag}\\]\\s*([\\s\\S]*?)(?=\\n\\[|$),
+`\\[${tag}\\]\\s*([\\s\\S]*?)(?=\\n\\[|$)`,
 "i"
 );
 
@@ -113,9 +113,11 @@ let match;
 
 while ((match = regex.exec(text)) !== null) {
 
+```
 fields[
   match[1].trim()
 ] = match[2].trim();
+```
 
 }
 
@@ -126,6 +128,7 @@ function replacePlaceholders(html, data) {
 
 for (const key in data) {
 
+```
 html = html.replace(
   new RegExp(
     `{{${key}}}`,
@@ -133,11 +136,13 @@ html = html.replace(
   ),
   data[key]
 );
+```
 
 }
 
 return html;
 }
+
 // ================= PROCESS =================
 async function processQueue() {
 if (isProcessing || queue.length === 0) return;

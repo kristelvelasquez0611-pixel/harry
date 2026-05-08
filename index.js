@@ -217,11 +217,12 @@ const data = parseFields(msg);
 
 let html = project.template;
 
+html = buildItems(html, msg);
+
 html = replacePlaceholders(
   html,
   data
 );
-html = buildItems(html, msg);
 
 html = autoAlignNumbers(html);
 

@@ -24,7 +24,6 @@ global.fetch = (...args) =>
 const fs = require("fs");
 const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
-const OpenAI = require("openai");
 
 // ================= SERVER =================
 const app = express();
@@ -39,11 +38,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
-});
-
-// ================= OPENAI =================
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
 });
 
 // ================= MEMORY =================
@@ -88,7 +82,57 @@ async function updateQueueUI() {
     } catch {}
   }
 }
+function extractPlaceholders(html) {
 
+  const matches =
+    [...html.matchAll(/{{(.*?)}}/g)];
+
+  return matches.map(m => m[1].trim());
+}
+
+function getValue(tag, text) {
+function parseFields(text) {
+
+  const fields = {};
+
+  const regex =
+/([A-Z0-9_]+)\s*=\s*(.+)/g;
+
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+
+    fields[
+      match[1].trim()
+    ] = match[2].trim();
+  }
+
+  return fields;
+}
+function replacePlaceholders(html, data) {
+
+  for (const key in data) {
+
+    html = html.replace(
+      new RegExp(
+        `{{${key}}}`,
+        "g"
+      ),
+      data[key]
+    );
+  }
+
+  return html;
+}
+  const regex = new RegExp(
+    `\\[${tag}\\]\\s*([\\s\\S]*?)(?=\\n\\[|$)`,
+    "i"
+  );
+
+  const match = text.match(regex);
+
+  return match ? match[1].trim() : "";
+}
 // ================= PROCESS =================
 async function processQueue() {
   if (isProcessing || queue.length === 0) return;
@@ -108,49 +152,14 @@ async function processQueue() {
   try {
     await statusMsg.edit("⚙️ Understanding template...");
     await statusMsg.edit("📄 Generating receipt...");
+const data = parseFields(msg);
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: `
-You are Harry, an expert HTML generator.
+let html = project.template;
 
-STRICT RULES (NO EXCEPTIONS):
-- You MUST NOT remove ANY text from the template
-- You MUST NOT summarize, shorten, or skip lines
-- Every sentence in the template MUST appear in the output
-- Even repeated or similar text MUST be preserved
-- DO NOT clean or optimize content
-- DO NOT remove boilerplate text
-- Follow template EXACTLY
-- Do NOT change layout
-- Do NOT redesign
-- Only replace allowed content
-- Preserve spacing and structure
-
-You are NOT allowed to decide what is important.
-You are ONLY allowed to replace values.
-
-Return FULL HTML exactly as template, with replaced values only.
-`
-        },
-        {
-          role: "user",
-          content: `
-TEMPLATE:
-${project.template}
-
-DATA:
-${msg}
-`
-        }
-      ]
-    });
-
-    let html = response.choices?.[0]?.message?.content;
+html = replacePlaceholders(
+  html,
+  data
+);
 
 // 🔥 AUTO ALIGN ALL NUMBERS
 html = autoAlignNumbers(html);
@@ -236,21 +245,64 @@ if (msg.toLowerCase().startsWith("project:")) {
     const file = message.attachments.first();
 
     // 👉 READ TXT FILE
-    if (file.name.endsWith(".txt")) {
-      try {
-        const res = await fetch(file.url);
-        const text = await res.text();
+    // ================= FILE READER =================
+if (message.attachments.size > 0) {
 
-        msg += "\n" + text;
-        await message.reply("📄 TXT file loaded!");
-      } catch (err) {
-        console.error(err);
-        return message.reply("❌ Failed to read TXT file.");
-      }
+  const file = message.attachments.first();
+
+  // ================= HTML TRAINING =================
+  if (file.name.endsWith(".html")) {
+
+    if (message.author.id !== OWNER_ID) {
+      return;
     }
 
-}
+    const res = await fetch(file.url);
+    const html = await res.text();
 
+    const projectName =
+      memory.users[userId]?.project;
+
+    if (!projectName) {
+      return message.reply(
+        "⚠️ No active project."
+      );
+    }
+
+    memory.projects[projectName].template = html;
+
+    saveMemory();
+
+    return message.reply(
+      "🧠 Template saved for: " +
+      projectName
+    );
+  }
+
+  // ================= TXT DATA =================
+  if (file.name.endsWith(".txt")) {
+
+    try {
+
+      const res = await fetch(file.url);
+      const text = await res.text();
+
+      msg += "\n" + text;
+
+      await message.reply(
+        "📄 TXT file loaded!"
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+      return message.reply(
+        "❌ Failed to read TXT file."
+      );
+    }
+  }
+}
   // ================= SET PROJECT =================
 if (msg.toLowerCase().startsWith("train project:")) {
 

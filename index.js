@@ -136,6 +136,55 @@ function replacePlaceholders(html, data) {
 
   return html;
 }
+function buildItems(html, text) {
+
+  const templateMatch = html.match(
+    /<!-- ITEM_TEMPLATE_START -->([\s\S]*?)<!-- ITEM_TEMPLATE_END -->/
+  );
+
+  if (!templateMatch) return html;
+
+  const itemTemplate = templateMatch[1];
+
+  let finalItems = "";
+
+  const itemRegex =
+    /ITEM\d+:([\s\S]*?)(?=ITEM\d+:|$)/g;
+
+  let itemMatch;
+
+  while ((itemMatch = itemRegex.exec(text)) !== null) {
+
+    const itemText = itemMatch[1];
+
+    let itemHtml = itemTemplate;
+
+    const fields = parseFields(itemText);
+
+    for (const key in fields) {
+
+      itemHtml = itemHtml.replace(
+        new RegExp(
+          "\\{\\{" + key + "\\}\\}",
+          "g"
+        ),
+        fields[key]
+      );
+    }
+
+    itemHtml = itemHtml.replace(
+      /\{\{.*?\}\}/g,
+      ""
+    );
+
+    finalItems += itemHtml;
+  }
+
+  return html.replace(
+    /<!-- ITEM_TEMPLATE_START -->([\s\S]*?)<!-- ITEM_TEMPLATE_END -->/,
+    finalItems
+  );
+}
 // ================= PROCESS =================
 async function processQueue() {
 if (isProcessing || queue.length === 0) return;
@@ -172,6 +221,7 @@ html = replacePlaceholders(
   html,
   data
 );
+html = buildItems(html, msg);
 
 html = autoAlignNumbers(html);
 

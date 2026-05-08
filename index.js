@@ -338,8 +338,8 @@ client.on("messageCreate", async (message) => {
     );
   }
 
-  // ================= TRAIN PROJECT =================
-  if (msg.toLowerCase().startsWith("train project:")) {
+ // ================= TRAIN PROJECT =================
+if (msg.toLowerCase().startsWith("train project:")) {
 
   if (message.channel.name !== "hogwarts-battlefield") {
     return;
@@ -371,82 +371,86 @@ client.on("messageCreate", async (message) => {
     const file = message.attachments.first();
 
     if (
-  file.name.toLowerCase().endsWith(".html")
-) {
-
-  const res = await fetch(file.url);
-
-  const html = await res.text();
-
-  memory.projects[name].template = html;
-
-  saveMemory();
-
-return message.reply(
-  "🧠 Template saved for: " + name
-);
-}
-  }
-
-  return;
-}
-  // ================= FILE READER =================
-  if (message.attachments.size > 0) {
-
-    const file = message.attachments.first();
-
-    // HTML TEMPLATE
-    if (file.name.endsWith(".html")) {
-
-      if (message.author.id !== OWNER_ID) {
-        return;
-      }
+      file.name.toLowerCase().endsWith(".html")
+    ) {
 
       const res = await fetch(file.url);
+
       const html = await res.text();
 
-      const projectName =
-        memory.users[userId]?.project;
-
-      if (!projectName) {
-        return message.reply(
-          "⚠️ No active project."
-        );
-      }
-
-      memory.projects[projectName].template = html;
+      memory.projects[name].template = html;
 
       saveMemory();
 
       return message.reply(
-        "🧠 Template saved for: " +
-        projectName
+        "🧠 Template saved for: " + name
+      );
+    }
+  }
+
+  return;
+}
+
+// ================= FILE READER =================
+if (message.attachments.size > 0) {
+
+  const file = message.attachments.first();
+
+  // HTML TEMPLATE
+  if (
+    file.name.toLowerCase().endsWith(".html")
+  ) {
+
+    if (message.author.id !== OWNER_ID) {
+      return;
+    }
+
+    const res = await fetch(file.url);
+    const html = await res.text();
+
+    const projectName =
+      memory.users[userId]?.project;
+
+    if (!projectName) {
+      return message.reply(
+        "⚠️ No active project."
       );
     }
 
-    // TXT DATA
-    if (
-  file.name.toLowerCase().endsWith(".txt")
-) {
+    memory.projects[projectName].template = html;
 
-  try {
-
-    const res = await fetch(file.url);
-    const text = await res.text();
-
-    msg += "\n" + text;
-
-    await message.reply(
-      "📄 TXT file loaded!"
-    );
-
-  } catch (err) {
-
-    console.error(err);
+    saveMemory();
 
     return message.reply(
-      "❌ Failed to read TXT file."
+      "🧠 Template saved for: " +
+      projectName
     );
+  }
+
+  // TXT DATA
+  if (
+    file.name.toLowerCase().endsWith(".txt")
+  ) {
+
+    try {
+
+      const res = await fetch(file.url);
+      const text = await res.text();
+
+      msg += "\n" + text;
+
+      await message.reply(
+        "📄 TXT file loaded!"
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+      return message.reply(
+        "❌ Failed to read TXT file."
+      );
+    }
   }
 }
   // ================= PASTE TEMPLATE =================

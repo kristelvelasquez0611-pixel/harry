@@ -185,6 +185,24 @@ function buildItems(html, text) {
     finalItems
   );
 }
+function removeOptionalBlocks(html, data) {
+
+  return html.replace(
+    /<!-- OPTIONAL:(.*?)_START -->([\s\S]*?)<!-- OPTIONAL:\1_END -->/g,
+
+    (match, key, content) => {
+
+      if (
+        data[key] &&
+        data[key].trim() !== ""
+      ) {
+        return content;
+      }
+
+      return "";
+    }
+  );
+}
 // ================= PROCESS =================
 async function processQueue() {
 if (isProcessing || queue.length === 0) return;
@@ -220,6 +238,11 @@ let html = project.template;
 html = buildItems(html, msg);
 
 html = replacePlaceholders(
+  html,
+  data
+);
+
+html = removeOptionalBlocks(
   html,
   data
 );
@@ -347,7 +370,9 @@ client.on("messageCreate", async (message) => {
 
     const file = message.attachments.first();
 
-    if (file.name.endsWith(".html")) {
+    if (
+  file.name.toLowerCase().endsWith(".html")
+)
 
       const res = await fetch(file.url);
 
@@ -400,7 +425,9 @@ client.on("messageCreate", async (message) => {
     }
 
     // TXT DATA
-    if (file.name.endsWith(".txt")) {
+    if (
+  file.name.toLowerCase().endsWith(".txt")
+)
 
       try {
 

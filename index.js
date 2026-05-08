@@ -224,12 +224,12 @@ client.on("messageCreate", async (message) => {
   const channel = message.channel.name;
 
   const allowed =
-  channel.startsWith("harry-receipt-") ||
-  channel === "hogwarts-battlefield";
+    channel.startsWith("harry-receipt-") ||
+    channel === "hogwarts-battlefield";
 
-if (!allowed) return;
+  if (!allowed) return;
 
-if (!message.mentions.has(client.user.id)) return;
+  if (!message.mentions.has(client.user.id)) return;
 
   let msg = message.content
     .replace(/<@!?\d+>/g, "")
@@ -237,49 +237,127 @@ if (!message.mentions.has(client.user.id)) return;
 
   const userId = message.author.id;
 
-if (!memory.users[userId]) {
-  memory.users[userId] = {
-    project: null
-  };
-}
-if (msg.toLowerCase().startsWith("project:")) {
-
-  const name = msg
-    .split(":")[1]
-    ?.trim()
-    .toLowerCase();
-
-  if (!memory.projects[name]) {
-    return message.reply("❌ Project not found.");
+  if (!memory.users[userId]) {
+    memory.users[userId] = {
+      project: null
+    };
   }
 
-  memory.users[userId].project = name;
+  // ================= SET PROJECT =================
+  if (msg.toLowerCase().startsWith("project:")) {
 
-  saveMemory();
+    const name = msg
+      .split(":")[1]
+      ?.trim()
+      .toLowerCase();
 
-  return message.reply(
-  "👀 Project set to: " + name
-);
-}
-  // ================= TXT FILE READER =================
+    if (!memory.projects[name]) {
+      return message.reply("❌ Project not found.");
+    }
+
+    memory.users[userId].project = name;
+
+    saveMemory();
+
+    return message.reply(
+      "👀 Project set to: " + name
+    );
+  }
+
+  // ================= TRAIN PROJECT =================
+  if (msg.toLowerCase().startsWith("train project:")) {
+
+    if (message.channel.name !== "hogwarts-battlefield") {
+      return;
+    }
+
+    if (message.author.id !== OWNER_ID) {
+      return message.reply("❌ Only owner can train.");
+    }
+
+    const name = msg
+      .split(":")[1]
+      ?.trim()
+      .toLowerCase();
+
+    memory.projects[name] = {
+      template: null
+    };
+
+    memory.users[userId].project = name;
+
+    saveMemory();
+
+    return message.reply(
+      "🧠 Training started for: " + name
+    );
+  }
+
+  // ================= FILE READER =================
   if (message.attachments.size > 0) {
+
     const file = message.attachments.first();
 
-    // 👉 READ TXT FILE
-    // ================= FILE READER =================
-if (message.attachments.size > 0) {
+    // HTML TEMPLATE
+    if (file.name.endsWith(".html")) {
 
-  const file = message.attachments.first();
+      if (message.author.id !== OWNER_ID) {
+        return;
+      }
 
-  // ================= HTML TRAINING =================
-  if (file.name.endsWith(".html")) {
+      const res = await fetch(file.url);
+      const html = await res.text();
+
+      const projectName =
+        memory.users[userId]?.project;
+
+      if (!projectName) {
+        return message.reply(
+          "⚠️ No active project."
+        );
+      }
+
+      memory.projects[projectName].template = html;
+
+      saveMemory();
+
+      return message.reply(
+        "🧠 Template saved for: " +
+        projectName
+      );
+    }
+
+    // TXT DATA
+    if (file.name.endsWith(".txt")) {
+
+      try {
+
+        const res = await fetch(file.url);
+        const text = await res.text();
+
+        msg += "\n" + text;
+
+        await message.reply(
+          "📄 TXT file loaded!"
+        );
+
+      } catch (err) {
+
+        console.error(err);
+
+        return message.reply(
+          "❌ Failed to read TXT file."
+        );
+      }
+    }
+  }
+
+  // ================= PASTE TEMPLATE =================
+  if (msg.includes("<html")) {
 
     if (message.author.id !== OWNER_ID) {
       return;
     }
-
-    const res = await fetch(file.url);
-    const html = await res.text();
 
     const projectName =
       memory.users[userId]?.project;
@@ -290,7 +368,7 @@ if (message.attachments.size > 0) {
       );
     }
 
-    memory.projects[projectName].template = html;
+    memory.projects[projectName].template = msg;
 
     saveMemory();
 
@@ -300,121 +378,49 @@ if (message.attachments.size > 0) {
     );
   }
 
-  // ================= TXT DATA =================
-  if (file.name.endsWith(".txt")) {
-
-    try {
-
-      const res = await fetch(file.url);
-      const text = await res.text();
-
-      msg += "\n" + text;
-
-      await message.reply(
-        "📄 TXT file loaded!"
-      );
-
-    } catch (err) {
-
-      console.error(err);
-
-      return message.reply(
-        "❌ Failed to read TXT file."
-      );
-    }
-  }
-}
-  // ================= SET PROJECT =================
-if (msg.toLowerCase().startsWith("train project:")) {
-
-  if (message.channel.name !== "hogwarts-battlefield") {
-    return;
-  }
-
-  if (message.author.id !== OWNER_ID) {
-    return message.reply("❌ Only owner can train.");
-  }
-
-  const name = msg
-    .split(":")[1]
-    ?.trim()
-    .toLowerCase();
-
-  memory.projects[name] = {
-    template: null
-  };
-
-  memory.users[userId].project = name;
-
-  saveMemory();
-
-  return message.reply(
-  "🧠 Training started for: " + name
-);
-}
-  // ================= PASTE TEMPLATE =================
-if (msg.includes("<html")) {
-
-  if (message.author.id !== OWNER_ID) {
-    return;
-  }
-
-  const projectName =
-    memory.users[userId]?.project;
-
-  if (!projectName) {
-    return message.reply("⚠️ No active project.");
-  }
-
-  memory.projects[projectName].template = msg;
-
-  saveMemory();
-
-  return message.reply(
-    "🧠 Template saved for: " + projectName
-  );
-}
   // ================= GENERATE =================
   if (msg.toLowerCase().includes("generate")) {
 
     const position = queue.length + 1;
+
     const eta = getETA(position);
 
     const statusMsg = await message.reply(
-  "👀 Got your request!\n⏳ Queue position: #" +
-  position +
-  "\n⏱ ETA: " +
-  eta
-);
+      "👀 Got your request!\n⏳ Queue position: #" +
+      position +
+      "\n⏱ ETA: " +
+      eta
+    );
 
     const projectName =
-  memory.users[userId]?.project;
+      memory.users[userId]?.project;
 
-if (!projectName) {
-  return message.reply(
-    "⚠️ Please set project first."
-  );
-}
+    if (!projectName) {
+      return message.reply(
+        "⚠️ Please set project first."
+      );
+    }
 
-const project =
-  memory.projects[projectName];
+    const project =
+      memory.projects[projectName];
 
-if (!project?.template) {
-  return message.reply(
-    "❌ Template not found."
-  );
-}
+    if (!project?.template) {
+      return message.reply(
+        "❌ Template not found."
+      );
+    }
+
     queue.push({
-  message,
-  project,
-  msg,
-  statusMsg
-});
+      message,
+      project,
+      msg,
+      statusMsg
+    });
 
     updateQueueUI();
+
     processQueue();
   }
 });
-
 // ================= LOGIN =================
 client.login(process.env.DISCORD_TOKEN);

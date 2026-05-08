@@ -382,9 +382,13 @@ client.on("messageCreate", async (message) => {
 
   saveMemory();
 
-  return message.reply(
-    "🧠 Template saved for: " + name
-  );
+return message.reply(
+  "🧠 Template saved for: " + name
+);
+}
+  }
+
+  return;
 }
   // ================= FILE READER =================
   if (message.attachments.size > 0) {
@@ -423,30 +427,28 @@ client.on("messageCreate", async (message) => {
     // TXT DATA
     if (
   file.name.toLowerCase().endsWith(".txt")
-)
+) {
 
-      try {
+  try {
 
-        const res = await fetch(file.url);
-        const text = await res.text();
+    const res = await fetch(file.url);
+    const text = await res.text();
 
-        msg += "\n" + text;
+    msg += "\n" + text;
 
-        await message.reply(
-          "📄 TXT file loaded!"
-        );
+    await message.reply(
+      "📄 TXT file loaded!"
+    );
 
-      } catch (err) {
+  } catch (err) {
 
-        console.error(err);
+    console.error(err);
 
-        return message.reply(
-          "❌ Failed to read TXT file."
-        );
-      }
-    }
+    return message.reply(
+      "❌ Failed to read TXT file."
+    );
   }
-
+}
   // ================= PASTE TEMPLATE =================
   if (msg.includes("<html")) {
 
@@ -517,5 +519,6 @@ client.on("messageCreate", async (message) => {
     processQueue();
   }
 });
+
 // ================= LOGIN =================
 client.login(process.env.DISCORD_TOKEN);

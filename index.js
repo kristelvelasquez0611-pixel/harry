@@ -372,23 +372,19 @@ client.on("messageCreate", async (message) => {
 
     if (
   file.name.toLowerCase().endsWith(".html")
-)
+) {
 
-      const res = await fetch(file.url);
+  const res = await fetch(file.url);
 
-      const html = await res.text();
+  const html = await res.text();
 
-      memory.projects[name].template = html;
+  memory.projects[name].template = html;
 
-      saveMemory();
+  saveMemory();
 
-      return message.reply(
-        "🧠 Template saved for: " + name
-      );
-    }
-  }
-
-  return;
+  return message.reply(
+    "🧠 Template saved for: " + name
+  );
 }
   // ================= FILE READER =================
   if (message.attachments.size > 0) {

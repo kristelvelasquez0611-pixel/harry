@@ -135,23 +135,31 @@ function replacePlaceholders(html, data) {
 }
 // ================= PROCESS =================
 async function processQueue() {
-  if (isProcessing || queue.length === 0) return;
+if (isProcessing || queue.length === 0) return;
 
-  isProcessing = true;
+isProcessing = true;
 
-  const job = queue.shift();
-  const { message, project, msg, statusMsg } = job;
+const job = queue.shift();
+const { message, project, msg, statusMsg } = job;
 
-  updateQueueUI();
+updateQueueUI();
 
-  let typing = true;
-  const typingInterval = setInterval(() => {
-    if (typing) message.channel.sendTyping().catch(() => {});
-  }, 3000);
+let typing = true;
 
-  try {
-    await statusMsg.edit("⚙️ Understanding template...");
-    await statusMsg.edit("📄 Generating receipt...");
+const typingInterval = setInterval(() => {
+if (typing)
+message.channel.sendTyping().catch(() => {});
+}, 3000);
+
+try {
+
+await statusMsg.edit(
+  "⚙️ Understanding template..."
+);
+
+await statusMsg.edit(
+  "📄 Generating receipt..."
+);
 
 const data = parseFields(msg);
 
@@ -163,30 +171,41 @@ html = replacePlaceholders(
 );
 
 html = autoAlignNumbers(html);
-    typing = false;
-    clearInterval(typingInterval);
 
-    if (!html) return statusMsg.edit("⚠️ Failed to generate.");
+typing = false;
 
-    const fileName =
-  "output_" + Date.now() + ".html";
-    fs.writeFileSync(fileName, html);
+clearInterval(typingInterval);
 
-    await statusMsg.edit({
-      content: "✅ Generation complete",
-
-      files: [fileName]
-    });
-
-  } catch (err) {
-    console.error(err);
-    await statusMsg.edit("❌ Error occurred.");
-  }
-
-  isProcessing = false;
-  processQueue();
+if (!html) {
+  return statusMsg.edit(
+    "⚠️ Failed to generate."
+  );
 }
 
+const fileName =
+  "output_" + Date.now() + ".html";
+
+fs.writeFileSync(fileName, html);
+
+await statusMsg.edit({
+  content: "✅ Generation complete",
+  files: [fileName]
+});
+
+} catch (err) {
+
+console.error(err);
+
+await statusMsg.edit(
+  "❌ Error occurred."
+);
+
+}
+
+isProcessing = false;
+
+processQueue();
+}
 // ================= READY =================
 client.once("ready", () => {
   console.log(

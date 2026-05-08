@@ -267,32 +267,53 @@ client.on("messageCreate", async (message) => {
   // ================= TRAIN PROJECT =================
   if (msg.toLowerCase().startsWith("train project:")) {
 
-    if (message.channel.name !== "hogwarts-battlefield") {
-      return;
-    }
-
-    if (message.author.id !== OWNER_ID) {
-      return message.reply("❌ Only owner can train.");
-    }
-
-    const name = msg
-      .split(":")[1]
-      ?.trim()
-      .toLowerCase();
-
-    memory.projects[name] = {
-      template: null
-    };
-
-    memory.users[userId].project = name;
-
-    saveMemory();
-
-    return message.reply(
-      "🧠 Training started for: " + name
-    );
+  if (message.channel.name !== "hogwarts-battlefield") {
+    return;
   }
 
+  if (message.author.id !== OWNER_ID) {
+    return message.reply("❌ Only owner can train.");
+  }
+
+  const name = msg
+    .split(":")[1]
+    ?.trim()
+    .toLowerCase();
+
+  memory.projects[name] = {
+    template: null
+  };
+
+  memory.users[userId].project = name;
+
+  saveMemory();
+
+  await message.reply(
+    "🧠 Training started for: " + name
+  );
+
+  if (message.attachments.size > 0) {
+
+    const file = message.attachments.first();
+
+    if (file.name.endsWith(".html")) {
+
+      const res = await fetch(file.url);
+
+      const html = await res.text();
+
+      memory.projects[name].template = html;
+
+      saveMemory();
+
+      return message.reply(
+        "🧠 Template saved for: " + name
+      );
+    }
+  }
+
+  return;
+}
   // ================= FILE READER =================
   if (message.attachments.size > 0) {
 

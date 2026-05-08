@@ -525,4 +525,5 @@ if (message.attachments.size > 0) {
 });
 
 // ================= LOGIN =================
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN)
+.catch(console.error);

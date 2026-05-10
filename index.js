@@ -136,6 +136,27 @@ function replacePlaceholders(html, data) {
 
   return html;
 }
+
+function processOptionalBlocks(html, data) {
+
+  return html.replace(
+    /<!-- OPTIONAL:(.*?)_START -->([\s\S]*?)<!-- OPTIONAL:\1_END -->/g,
+
+    (match, key, content) => {
+
+      const value = data[key.trim()];
+
+      // If value is empty → remove block
+      if (!value || value.trim() === "") {
+        return "";
+      }
+
+      // If value exists → keep block
+      return content;
+    }
+  );
+}
+
 function buildItems(html, text) {
 
   const templateMatch = html.match(
@@ -161,21 +182,20 @@ function buildItems(html, text) {
 
     const fields = parseFields(itemText);
 
-    for (const key in fields) {
+itemHtml = processOptionalBlocks(
+  itemHtml,
+  fields
+);
 
-      itemHtml = itemHtml.replace(
-        new RegExp(
-          "\\{\\{" + key + "\\}\\}",
-          "g"
-        ),
-        fields[key]
-      );
-    }
+itemHtml = replacePlaceholders(
+  itemHtml,
+  fields
+);
 
-    itemHtml = itemHtml.replace(
-      /\{\{.*?\}\}/g,
-      ""
-    );
+itemHtml = itemHtml.replace(
+  /\{\{.*?\}\}/g,
+  ""
+);
 
     finalItems += itemHtml;
   }
@@ -237,10 +257,9 @@ let html = project.template;
 
 html = buildItems(html, msg);
 
-html = replacePlaceholders(
-  html,
-  data
-);
+html = processOptionalBlocks(html, data);
+
+html = replacePlaceholders(html, data);
 
 html = removeOptionalBlocks(
   html,

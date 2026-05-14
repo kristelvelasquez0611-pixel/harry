@@ -43,12 +43,39 @@ const client = new Client({
 // ================= MEMORY =================
 let memory = { projects: {}, users: {} };
 
-if (fs.existsSync("memory.json")) {
-  memory = JSON.parse(fs.readFileSync("memory.json"));
+const memoryPath =
+  __dirname + "/memory.json";
+
+if (fs.existsSync(memoryPath)) {
+
+  const raw =
+    fs.readFileSync(memoryPath, "utf8");
+
+  if (raw.trim()) {
+    memory = JSON.parse(raw);
+  }
 }
 
 function saveMemory() {
-  fs.writeFileSync("memory.json", JSON.stringify(memory, null, 2));
+
+  console.log("🔥 SAVING MEMORY");
+
+  console.log(
+    JSON.stringify(memory, null, 2)
+  );
+
+  const path =
+    __dirname + "/memory.json";
+
+  fs.writeFileSync(
+    path,
+    JSON.stringify(memory, null, 2),
+    "utf8"
+  );
+
+  console.log(
+    "✅ SAVED SUCCESSFULLY"
+  );
 }
 
 // ================= ETA =================
@@ -230,7 +257,12 @@ if (isProcessing || queue.length === 0) return;
 isProcessing = true;
 
 const job = queue.shift();
-const { message, project, msg, statusMsg } = job;
+const {
+  message,
+  projectName,
+  msg,
+  statusMsg
+} = job;
 
 updateQueueUI();
 
@@ -253,7 +285,17 @@ await statusMsg.edit(
 
 const data = parseFields(msg);
 
-let html = project.template;
+const liveProject =
+  memory.projects[projectName];
+
+if (!liveProject) {
+
+  return statusMsg.edit(
+    "❌ Project not found."
+  );
+}
+
+let html = liveProject.template;
 
 html = buildItems(html, msg);
 
@@ -311,6 +353,23 @@ client.once("ready", () => {
 
 // ================= MAIN =================
 client.on("messageCreate", async (message) => {
+
+console.log("=== MESSAGE EVENT ===");
+
+console.log(
+  "CONTENT:",
+  message.content
+);
+
+console.log(
+  "ATTACHMENTS:",
+  message.attachments.size
+);
+
+console.log(
+  "CHANNEL:",
+  message.channel.name
+);
 
   if (message.author.bot) return;
 
@@ -393,17 +452,47 @@ if (msg.toLowerCase().startsWith("train project:")) {
       file.name.toLowerCase().endsWith(".html")
     ) {
 
-      const res = await fetch(file.url);
+      try {
 
-      const html = await res.text();
+  console.log("📥 Fetching HTML...");
 
-      memory.projects[name].template = html;
+  const res = await fetch(file.url);
 
-      saveMemory();
+  console.log(
+    "FETCH STATUS:",
+    res.status
+  );
 
-      return message.reply(
-        "🧠 Template saved for: " + name
-      );
+  const html = await res.text();
+
+  console.log(
+    "HTML LENGTH:",
+    html.length
+  );
+
+  memory.projects[name].template = html;
+
+  console.log(
+    "PROJECT STORED"
+  );
+
+  saveMemory();
+
+  return message.reply(
+    "🧠 Template saved for: " + name
+  );
+
+} catch (err) {
+
+  console.error(
+    "TRAIN ERROR:",
+    err
+  );
+
+  return message.reply(
+    "❌ Failed to save template."
+  );
+}
     }
   }
 
@@ -531,11 +620,12 @@ if (message.attachments.size > 0) {
     }
 
     queue.push({
-      message,
-      project,
-      msg,
-      statusMsg
-    });
+  message,
+  projectName:
+    memory.users[userId].project,
+  msg,
+  statusMsg
+});
 
     updateQueueUI();
 

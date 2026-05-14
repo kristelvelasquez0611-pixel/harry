@@ -432,9 +432,11 @@ if (msg.toLowerCase().startsWith("train project:")) {
     ?.trim()
     .toLowerCase();
 
-  memory.projects[name] = {
-    template: null
-  };
+  if (!memory.projects[name]) {
+
+  memory.projects[name] = {};
+
+}
 
   memory.users[userId].project = name;
 
